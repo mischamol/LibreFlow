@@ -93,6 +93,10 @@ dialog::backdrop{background:#0007}
 .formGrid label{display:flex;flex-direction:column;gap:4px;font-size:14px}
 fieldset{border:1px solid var(--line);border-radius:10px;margin:10px 0}
 fieldset label{display:inline-flex;gap:6px;align-items:center;margin:2px 12px 2px 0;font-size:14px}
+/* Older / Newer / Edit / Export always on one line, also on a phone */
+#rdBtns{flex-wrap:nowrap;gap:6px;width:100%}
+#rdBtns button{flex:1 1 0;min-width:0;padding:7px 4px;font-size:14px;white-space:nowrap}
+#rdBtns button.hidden{display:none}
 #runsTbl tr[data-i]{cursor:pointer}
 #runsTbl tr[data-i]:hover td{background:var(--info-bg)}
 #runsTbl tr.deep td:first-child::after{content:" •";color:var(--accent3)}
@@ -170,7 +174,7 @@ ol{padding-left:20px}
 <div id="vRun">
   <section class="card" id="runDetail">
     <div class="row" style="justify-content:space-between"><h2 id="rdTitle"></h2>
-      <div class="row"><button id="rdPrev">‹ Older</button><button id="rdNext">Newer ›</button><button id="rdEdit">Edit…</button><button id="rdStrava" class="primary hidden">Export…</button></div></div>
+      <div class="row" id="rdBtns"><button id="rdPrev">‹ Older</button><button id="rdNext">Newer ›</button><button id="rdEdit">Edit…</button><button id="rdStrava" class="primary hidden">Export…</button></div></div>
     <div class="kpis" id="rdKpis" style="margin:10px 0"></div>
     <p class="hint hidden" id="rdShoeRow" style="margin:0 0 10px"></p>
     <div class="chart" style="height:320px"><canvas id="cRun"></canvas></div>
