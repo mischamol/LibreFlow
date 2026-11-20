@@ -3,12 +3,11 @@ import SwiftUI
 /// Settings › Shoes: distance per pair. The data lives in the analysis page; this is the native editor for it.
 struct ShoesSection: View {
     @EnvironmentObject var model: AppModel
-    @State private var editing: AppModel.Shoe?
 
     var body: some View {
         Section {
             ForEach(model.shoes.filter { !$0.retired }) { row($0) }
-            Button { editing = AppModel.Shoe() } label: { Label("Add shoes", systemImage: "plus") }
+            Button { model.editingShoe = AppModel.Shoe() } label: { Label("Add shoes", systemImage: "plus") }
             let retired = model.shoes.filter(\.retired)
             if !retired.isEmpty {
                 DisclosureGroup("Retired shoes (\(retired.count))") { ForEach(retired) { row($0) } }
@@ -16,12 +15,10 @@ struct ShoesSection: View {
         } header: { Text("Shoes") } footer: {
             Text("Runs count for the default shoes of their sport from the date the shoes are in use. Change the shoes of a single run under Latest Run.")
         }
-        .task { await model.refreshShoes() }
-        .sheet(item: $editing) { s in ShoeEditView(shoe: s).environmentObject(model) }
     }
 
     private func row(_ s: AppModel.Shoe) -> some View {
-        Button { editing = s } label: {
+        Button { model.editingShoe = s } label: {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(s.display).foregroundStyle(.primary)

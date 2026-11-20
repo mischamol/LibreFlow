@@ -1016,6 +1016,7 @@ const shoeName = g => g.name || `${g.brand} ${g.model}`.trim();
 const ymdStr = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 // shoes of a run: the choice made for that run, else the default shoes for its sport that were in use on that day
 function shoeOf(r){
+  if (!shoeSport(r.sport)) return null;   // never shoes for sports without shoes (cycling, swimming, …)
   const k = sessionKey(r);
   if (k in ASSIGN) return GEAR.find(g => g.id === ASSIGN[k]) || null;
   const day = ymdStr(r.date);

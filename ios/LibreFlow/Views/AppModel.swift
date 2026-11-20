@@ -16,6 +16,7 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
     @Published var settings = PageSettings()
     @Published var shoes: [Shoe] = []
     @Published var shoeSports: [String] = []
+    @Published var editingShoe: Shoe?
     let sync = WatchSync()
     let store = TrainingStore.shared
     private(set) lazy var webView: WKWebView = makeWebView()
@@ -122,6 +123,7 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         switch cmd {
         case "store":
             store.saveAnalysisStore(m["text"] as? String ?? "")
+            Task { await refreshShoes(); await refreshSettings() }   // keep the native Settings (shoe totals etc.) current
         case "share":
             let name = (m["name"] as? String ?? "export.txt").replacingOccurrences(of: "/", with: "-")
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)

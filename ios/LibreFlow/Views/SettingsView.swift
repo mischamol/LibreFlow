@@ -117,7 +117,9 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .scrollDismissesKeyboard(.interactively)
             .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Apply") { apply() } } }
-            .task { await model.refreshSettings(); fill() }
+            .task { await model.refreshSettings(); await model.refreshShoes(); fill() }
+            // attached to the whole screen, not to the shoe rows: refreshing the list must not close the editor
+            .sheet(item: $model.editingShoe) { s in ShoeEditView(shoe: s).environmentObject(model) }
             .onChange(of: model.settings.hrMax) { _, _ in if !editing { fill() } }
             .onAppear { secret = strava.clientSecret }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .zip], allowsMultipleSelection: true) { r in
