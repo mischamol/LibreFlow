@@ -69,9 +69,9 @@ struct SettingsView: View {
 
                 // --- Strava ---
                 Section {
-                    Toggle("Show \"To Strava\" button", isOn: $model.stravaEnabled)
+                    Toggle("Upload to Strava", isOn: $model.stravaEnabled)
                 } header: { Text("Strava") } footer: {
-                    Text("Off by default. When on, runs synced from the watch get a To Strava button that saves the run as a file you upload yourself at strava.com/upload/select (a free Strava account is enough). Heart rate is only included when you tick it.")
+                    Text("Off by default: runs then have an Export button that saves a GPX file (route, time, elevation, cadence, and heart rate only if you tick it) that you can upload yourself, for example to Strava with a free account. When on, that button becomes To Strava and uploads the run directly via the Strava API, which requires a paid Strava subscription and the connection below.")
                 }
                 if model.stravaEnabled {
                 Section {
@@ -90,8 +90,8 @@ struct SettingsView: View {
                         .disabled(strava.clientId.isEmpty || secret.isEmpty)
                         if let stravaError { Text(stravaError).foregroundStyle(.red).font(.footnote) }
                     }
-                } header: { Text("Direct upload (optional)") } footer: {
-                    Text("Only if you have access to the Strava API (strava.com/settings/api, which may require a Strava subscription): create an API application with Authorization Callback Domain \"localhost\" and enter its Client ID and Client Secret here. Without it, use the file export.")
+                } header: { Text("Direct upload (paid Strava subscription)") } footer: {
+                    Text("Requires a paid Strava subscription (needed for the Strava API at strava.com/settings/api): create an API application with Authorization Callback Domain \"localhost\" and enter its Client ID and Client Secret here. Without it, use the file export.")
                 }
                 }
 

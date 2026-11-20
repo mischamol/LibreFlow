@@ -32,17 +32,27 @@ Private, local analysis of your Polar running data. Tested with a Polar Grit X (
 - **Bluetooth tool** (`polar_ble.py`): read-only download of trainings from the watch on a Mac/PC.
 
 ## Strava (optional)
-Strava's API now requires a paid subscription, so LibreFlow exports runs as a **file you upload yourself** – this
-works with a free Strava account and nothing is sent automatically.
+Every run synced from the watch has an **Export…** button in the app. Two ways to get a run on Strava:
 
-1. In the app: *Settings › Strava* › switch on **Show "To Strava" button** (off by default).
-2. Open a run synced from the watch › **To Strava…** › choose whether to include heart rate › **Save file for Strava…**
+- **File upload – free Strava account.** *Export…* saves the run as a **GPX file** and you upload it yourself. Nothing is
+  sent automatically.
+- **Direct upload – paid Strava subscription.** Strava's API requires a subscription. Switch on *Settings ›
+  Strava › Upload to Strava*: the button becomes **To Strava…** and uploads the run for you after the preview.
+
+### File upload (free account)
+
+1. Open a run synced from the watch › **Export…** › choose whether to include heart rate › **Export…** (a GPX file: route, time,
+   elevation, cadence and – only if ticked – heart rate; runs without GPS are saved as TCX)
    (Files, iCloud Drive or AirDrop to your Mac).
-3. Upload it at **strava.com › + › Upload activity › File** (`https://www.strava.com/upload/select`). On an iPhone,
+2. Upload it at **strava.com › + › Upload activity › File** (`https://www.strava.com/upload/select`). On an iPhone,
    Safari needs *Request Desktop Website* for that page; the Strava app cannot import files.
 
-Have access to the Strava API? Then you can also connect your own API application under *Settings › Strava ›
-Direct upload* (Authorization Callback Domain `localhost`) and upload directly.
+### Direct upload (paid subscription)
+1. On strava.com go to `https://www.strava.com/settings/api` and create an API application with
+   *Authorization Callback Domain* `localhost`.
+2. In the app: *Settings › Strava* › switch on **Upload to Strava**, then under *Direct upload* enter the Client ID
+   and Client Secret and tap **Connect Strava**.
+3. The run button is now **To Strava…** › **Upload to Strava**.
 
 ## Screenshots
 Fictional demo data. Try it yourself: open `libreflow.html#demo` (add `&view=trends`, `runs` or `settings`).

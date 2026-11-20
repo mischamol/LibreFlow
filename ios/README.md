@@ -9,10 +9,10 @@ No Polar Flow, no account, no cloud, no external AI. Everything stays on your iP
   `tools/make_app_page.py`; inside the app the page cannot load anything from the internet). Tabs **Latest Run** (your newest run, older/newer), **Analysis** (advice and
   charts) and **All Runs**. At the top: **Sync** (reads the watch: read-only plus
   Polar's sync notifications, new days only) and a button for the **sync log**.
-  With *Settings › Strava* switched on, a run gets a *To Strava…* button.
-- **Strava export** (off by default): preview with map, *Include heart rate* switch (**off** by default), then
-  *Save file for Strava…* to upload yourself at strava.com/upload/select. Direct upload only with your own Strava API
-  application (the Strava API may require a subscription).
+  Each run has an *Export…* button (save as file); with *Settings › Strava* on it becomes *To Strava…*.
+- **Export**: preview with map, *Include heart rate* switch (**off** by default), then *Export…* (GPX; TCX for runs without GPS; upload it
+  yourself, e.g. at strava.com/upload/select with a free account). **To Strava** (Settings › Strava on): direct
+  upload via your own Strava API application, which requires a paid Strava subscription.
 - **Settings**: import (Polar export ZIP, backup, JSON), make backup, CSV, demo data, heart rate and thresholds,
   sports, connect Strava, forget watch, delete data.
 
@@ -45,8 +45,7 @@ as you do not delete the app. At most 3 self-installed apps at a time.
    Pair and sync phone) and accept the pairing request.
 2. **History**: import the Polar export ZIP (account.polar.com › Download your data, ~75 MB) directly via
    *Settings › Import file…*. A backup made on the Mac (*Make backup*) works too.
-3. **Strava (optional)**: see the main README › *Strava*: switch on *Settings › Strava*, save a run as a file and
-   upload it at strava.com/upload/select.
+3. **Strava (optional)**: see the main README › *Strava*.
 
 ## Troubleshooting
 - The sync log is also written to `sync-log.txt` in the app's folder (Files app, or

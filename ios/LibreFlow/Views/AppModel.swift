@@ -21,7 +21,7 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
     private(set) lazy var webView: WKWebView = makeWebView()
     private var pageReady = false
 
-    struct StravaTarget: Identifiable { let id: String }
+    struct StravaTarget: Identifiable { let id: String; var toStrava = false }
     struct ShareItem: Identifiable { let id = UUID(); let url: URL }
 
     /// A pair of shoes as kept by the analysis page (window.appShoes / appSaveShoe / appDeleteShoe).
@@ -131,7 +131,7 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         case "status":
             pageStatus = m["text"] as? String ?? ""
         case "strava":
-            if let id = m["id"] as? String { stravaTarget = StravaTarget(id: id) }
+            if let id = m["id"] as? String { stravaTarget = StravaTarget(id: id, toStrava: m["toStrava"] as? Bool ?? false) }
         default: break
         }
     }

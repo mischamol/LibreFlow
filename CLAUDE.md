@@ -30,8 +30,8 @@ are in `CLAUDE.local.md`, which is not in git.
   when the watch did not compute one. Matches Flow's `runningIndex`; read by both decoders.
 - Max speed (Flow's "max pace"): `00/STATS.BPB` field 2 {1 avg, 2 max} km/h; Flow `statistics SPEED max`.
 - Known caveats: altitude looks uncalibrated; BASE field 11 (~20 m) may be ascent or descent, not verified.
-- Strava API needs a paid subscription (user has none): main route is the TCX file export + manual upload at
-  strava.com/upload/select. The To Strava button only shows when Settings › Strava is on (default off).
+- Strava: file upload (TCX, manual at strava.com/upload/select) is free; the API (direct upload) needs a paid
+  subscription. Both supported; the user has no subscription. In the app every run has Export… (GPX file via `GPXWriter`, TCX without GPS); with Settings › Strava on (default off) it becomes To Strava… (API upload).
 
 ## Files
 - `libreflow.html` – single source of the analysis page (English). Views: Latest Run (newest run,

@@ -170,7 +170,7 @@ ol{padding-left:20px}
 <div id="vRun">
   <section class="card" id="runDetail">
     <div class="row" style="justify-content:space-between"><h2 id="rdTitle"></h2>
-      <div class="row"><button id="rdPrev">‹ Older</button><button id="rdNext">Newer ›</button><button id="rdStrava" class="primary hidden">To Strava…</button></div></div>
+      <div class="row"><button id="rdPrev">‹ Older</button><button id="rdNext">Newer ›</button><button id="rdStrava" class="primary hidden">Export…</button></div></div>
     <div class="kpis" id="rdKpis" style="margin:10px 0"></div>
     <div class="row hidden" id="rdShoeRow" style="margin:0 0 10px"><label>Shoes <select id="rdShoe"></select></label>
       <span class="hint" id="rdNoShoes" style="margin:0">No shoes yet – add them under Settings › Shoes.</span></div>
@@ -1086,13 +1086,14 @@ $('#shDelete').onclick = () => {
 };
 
 let CUR_RUN = null;
-// the app's Settings › Strava switch (off by default) decides whether runs show the To Strava button
+// the app's Settings › Strava switch (off by default) turns the Export button into To Strava (direct upload via the API)
 let STRAVA_ON = false;
 window.appSetStrava = on => { STRAVA_ON = !!on; if (CUR_RUN) showRun(CUR_RUN); };
 function showRun(r){
   const d = r.deep, card = $('#runDetail');
   CUR_RUN = r;
-  $('#rdStrava').classList.toggle('hidden', !(APP && STRAVA_ON && r.wid));
+  $('#rdStrava').classList.toggle('hidden', !APP);   // always in the app; Export, or To Strava when that option is on
+  $('#rdStrava').textContent = STRAVA_ON ? 'To Strava…' : 'Export…';
   const i = RUNS.indexOf(r);
   $('#rdPrev').disabled = i <= 0; $('#rdNext').disabled = i < 0 || i >= RUNS.length - 1;
   $('#rdTitle').textContent = `${r.sport.toLowerCase().replace(/_/g,' ')} – ${r.date.toLocaleString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'})}`;
@@ -1152,7 +1153,11 @@ $('#btnDemo').onclick = () => {
 };
 $('#btnClear').onclick = clearStore;
 $('#btnBackup').onclick = exportBackup;
-$('#rdStrava').onclick = () => APP && CUR_RUN?.wid && APP.postMessage({cmd: 'strava', id: CUR_RUN.wid});
+$('#rdStrava').onclick = () => {
+  if (!APP || !CUR_RUN) return;
+  if (!CUR_RUN.wid){ alert('Only runs synced from the watch with this app can be exported: runs from the Polar Flow export have no raw files on this phone.'); return; }
+  APP.postMessage({cmd: 'strava', id: CUR_RUN.wid, toStrava: STRAVA_ON});
+};
 function showView(v){
   if (APP && document.body.dataset.view !== v) APP.postMessage({cmd: 'view', view: v});   // keep the app's tab bar in step
   document.body.dataset.view = v;

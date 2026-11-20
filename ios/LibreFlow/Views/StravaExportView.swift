@@ -1,9 +1,11 @@
 import SwiftUI
 import MapKit
 
-/// Preview of exactly what would be shared, with an explicit heart-rate choice (off by default).
+/// Preview of exactly what would be exported, with an explicit heart-rate choice (off by default).
+/// toStrava = false: save the run as a TCX file. toStrava = true: upload directly via the Strava API (paid subscription).
 struct StravaExportView: View {
     let trainingId: String
+    var toStrava = false
     @EnvironmentObject var strava: StravaClient
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -34,27 +36,41 @@ struct StravaExportView: View {
                             }
                             .frame(height: 200)
                             .listRowInsets(EdgeInsets())
-                        } footer: { Text("This route, including where it starts and ends, becomes visible on Strava according to your Strava privacy settings.") }
+                        } footer: { Text(toStrava ? "This route, including where it starts and ends, becomes visible on Strava according to your Strava privacy settings." : "The file contains this route, including where it starts and ends.") }
                     }
                     Section {
-                        if strava.isConnected { TextField("Activity name", text: $name) }
+                        if toStrava { TextField("Activity name", text: $name) }
                         Toggle("Include heart rate", isOn: $includeHR)
-                    } header: { Text("What is sent") } footer: {
-                        Text("Sent: GPS route, time, distance, altitude, speed and cadence" + (includeHR ? ", and heart rate (average, maximum and per second)." : ". Heart rate is not sent."))
+                    } header: { Text(toStrava ? "What is sent" : "What is in the file") } footer: {
+                        Text((toStrava ? "Sent" : "Included") + ": GPS route, time, distance, altitude, speed and cadence" + (includeHR ? ", and heart rate (average, maximum and per second)." : ". Heart rate is left out."))
                     }
+                    if !toStrava {
+                        Section {
+                            Button { shareFile(t) } label: { Label("Export…", systemImage: "square.and.arrow.up") }
+                        } footer: {
+                            Text(t.route.isEmpty ? "This run has no GPS route, so it is saved as a TCX file (Files, iCloud Drive, AirDrop…)." : "Saves the run as a GPX file (Files, iCloud Drive, AirDrop…): route, time, elevation and cadence, plus heart rate if ticked. Upload it yourself, for example at strava.com › + › Upload activity › File (free account; on an iPhone, Safari needs \"Request Desktop Website\" for that page), or open it in any app that reads GPX.")
+                        }
+                    } else {
                     Section {
-                        Button { shareFile(t) } label: { Label("Save file for Strava…", systemImage: "square.and.arrow.up") }
-                            .disabled(busy)
                         if strava.isConnected {
                             Button {
                                 Task { await upload(t) }
                             } label: {
-                                HStack { Text("Upload directly to Strava"); if busy { Spacer(); ProgressView() } }
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Upload to Strava")
+                                        Text("Via the Strava API (paid Strava subscription)").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    if busy { Spacer(); ProgressView() }
+                                }
                             }
                             .disabled(busy || name.isEmpty)
+                        } else {
+                            Text("Connect Strava first under Settings › Strava › Direct upload (paid Strava subscription).").foregroundStyle(.secondary)
                         }
                     } footer: {
-                        Text("Save the file (Files, iCloud Drive or AirDrop to your Mac), then upload it at strava.com › + › Upload activity › File (strava.com/upload/select). On an iPhone, Safari needs \"Request Desktop Website\" for that page. Nothing is sent until you do this yourself.")
+                        Text("Nothing is sent until you tap Upload.")
+                    }
                     }
                     if let message {
                         Section {
@@ -66,7 +82,7 @@ struct StravaExportView: View {
                     Text("This training has no summary on the watch (it was not saved properly) and cannot be exported.")
                 }
             }
-            .navigationTitle("Export to Strava")
+            .navigationTitle(toStrava ? "To Strava" : "Export")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
             .sheet(item: $share) { s in ShareSheet(items: [s.url]) }
@@ -90,10 +106,15 @@ struct StravaExportView: View {
         }
     }
 
+    /// GPX (route, time, elevation, cadence, heart rate only if ticked); TCX for runs without GPS, where GPX is empty.
     private func shareFile(_ t: DecodedTraining) {
-        guard let tcx = TCXWriter.tcx(for: t, includeHeartRate: includeHR) else { return }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(trainingId)\(includeHR ? "" : "-no-hr").tcx")
-        try? tcx.write(to: url, atomically: true, encoding: .utf8)
+        let base = "\(trainingId)\(includeHR ? "" : "-no-hr")"
+        let (text, ext): (String?, String) = t.route.isEmpty
+            ? (TCXWriter.tcx(for: t, includeHeartRate: includeHR), "tcx")
+            : (GPXWriter.gpx(for: t, includeHeartRate: includeHR, name: Self.defaultName(t)), "gpx")
+        guard let text else { message = "Could not build the file."; return }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(base).\(ext)")
+        try? text.write(to: url, atomically: true, encoding: .utf8)
         share = .init(url: url)
     }
 
