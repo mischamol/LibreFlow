@@ -1086,10 +1086,13 @@ $('#shDelete').onclick = () => {
 };
 
 let CUR_RUN = null;
+// the app's Settings › Strava switch (off by default) decides whether runs show the To Strava button
+let STRAVA_ON = false;
+window.appSetStrava = on => { STRAVA_ON = !!on; if (CUR_RUN) showRun(CUR_RUN); };
 function showRun(r){
   const d = r.deep, card = $('#runDetail');
   CUR_RUN = r;
-  $('#rdStrava').classList.toggle('hidden', !(APP && r.wid));
+  $('#rdStrava').classList.toggle('hidden', !(APP && STRAVA_ON && r.wid));
   const i = RUNS.indexOf(r);
   $('#rdPrev').disabled = i <= 0; $('#rdNext').disabled = i < 0 || i >= RUNS.length - 1;
   $('#rdTitle').textContent = `${r.sport.toLowerCase().replace(/_/g,' ')} – ${r.date.toLocaleString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'})}`;

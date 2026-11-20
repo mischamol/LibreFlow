@@ -31,6 +31,19 @@ Private, local analysis of your Polar running data. Tested with a Polar Grit X (
   to Strava (heart rate only if you tick it).
 - **Bluetooth tool** (`polar_ble.py`): read-only download of trainings from the watch on a Mac/PC.
 
+## Strava (optional)
+Strava's API now requires a paid subscription, so LibreFlow exports runs as a **file you upload yourself** – this
+works with a free Strava account and nothing is sent automatically.
+
+1. In the app: *Settings › Strava* › switch on **Show "To Strava" button** (off by default).
+2. Open a run synced from the watch › **To Strava…** › choose whether to include heart rate › **Save file for Strava…**
+   (Files, iCloud Drive or AirDrop to your Mac).
+3. Upload it at **strava.com › + › Upload activity › File** (`https://www.strava.com/upload/select`). On an iPhone,
+   Safari needs *Request Desktop Website* for that page; the Strava app cannot import files.
+
+Have access to the Strava API? Then you can also connect your own API application under *Settings › Strava ›
+Direct upload* (Authorization Callback Domain `localhost`) and upload directly.
+
 ## Screenshots
 Fictional demo data. Try it yourself: open `libreflow.html#demo` (add `&view=trends`, `runs` or `settings`).
 

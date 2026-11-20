@@ -37,21 +37,24 @@ struct StravaExportView: View {
                         } footer: { Text("This route, including where it starts and ends, becomes visible on Strava according to your Strava privacy settings.") }
                     }
                     Section {
-                        TextField("Activity name", text: $name)
+                        if strava.isConnected { TextField("Activity name", text: $name) }
                         Toggle("Include heart rate", isOn: $includeHR)
                     } header: { Text("What is sent") } footer: {
                         Text("Sent: GPS route, time, distance, altitude, speed and cadence" + (includeHR ? ", and heart rate (average, maximum and per second)." : ". Heart rate is not sent."))
                     }
                     Section {
-                        Button {
-                            Task { await upload(t) }
-                        } label: {
-                            HStack { Text(strava.isConnected ? "Upload to Strava" : "Connect Strava in Settings first"); if busy { Spacer(); ProgressView() } }
+                        Button { shareFile(t) } label: { Label("Save file for Strava…", systemImage: "square.and.arrow.up") }
+                            .disabled(busy)
+                        if strava.isConnected {
+                            Button {
+                                Task { await upload(t) }
+                            } label: {
+                                HStack { Text("Upload directly to Strava"); if busy { Spacer(); ProgressView() } }
+                            }
+                            .disabled(busy || name.isEmpty)
                         }
-                        .disabled(busy || !strava.isConnected || name.isEmpty)
-                        Button("Share as TCX file…") { shareFile(t) }.disabled(busy)
                     } footer: {
-                        Text("Nothing is sent until you tap a button. Sharing as a file lets you upload it yourself at strava.com/upload.")
+                        Text("Save the file (Files, iCloud Drive or AirDrop to your Mac), then upload it at strava.com › + › Upload activity › File (strava.com/upload/select). On an iPhone, Safari needs \"Request Desktop Website\" for that page. Nothing is sent until you do this yourself.")
                     }
                     if let message {
                         Section {

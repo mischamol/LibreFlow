@@ -69,6 +69,12 @@ struct SettingsView: View {
 
                 // --- Strava ---
                 Section {
+                    Toggle("Show \"To Strava\" button", isOn: $model.stravaEnabled)
+                } header: { Text("Strava") } footer: {
+                    Text("Off by default. When on, runs synced from the watch get a To Strava button that saves the run as a file you upload yourself at strava.com/upload/select (a free Strava account is enough). Heart rate is only included when you tick it.")
+                }
+                if model.stravaEnabled {
+                Section {
                     if strava.isConnected {
                         LabeledContent("Connected", value: strava.athleteName ?? "yes")
                         Button("Disconnect Strava", role: .destructive) { strava.disconnect() }
@@ -84,8 +90,9 @@ struct SettingsView: View {
                         .disabled(strava.clientId.isEmpty || secret.isEmpty)
                         if let stravaError { Text(stravaError).foregroundStyle(.red).font(.footnote) }
                     }
-                } header: { Text("Strava") } footer: {
-                    Text("Uses your own free Strava API application: on strava.com go to Settings › My API Application, create one with Authorization Callback Domain \"localhost\", and enter its Client ID and Client Secret here. Export a run from its detail view in Analysis (To Strava…). Heart rate is only sent when you tick it.")
+                } header: { Text("Direct upload (optional)") } footer: {
+                    Text("Only if you have access to the Strava API (strava.com/settings/api, which may require a Strava subscription): create an API application with Authorization Callback Domain \"localhost\" and enter its Client ID and Client Secret here. Without it, use the file export.")
+                }
                 }
 
                 // --- watch ---

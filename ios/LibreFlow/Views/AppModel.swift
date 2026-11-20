@@ -8,6 +8,10 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
     @Published var stravaTarget: StravaTarget?
     @Published var shareURL: ShareItem?
     @Published var tab = 0
+    /// Settings › Strava: show the To Strava button on runs (off by default)
+    @Published var stravaEnabled = UserDefaults.standard.bool(forKey: "stravaEnabled") {
+        didSet { UserDefaults.standard.set(stravaEnabled, forKey: "stravaEnabled"); pushStravaSetting() }
+    }
     @Published var pageStatus = ""
     @Published var settings = PageSettings()
     @Published var shoes: [Shoe] = []
@@ -94,6 +98,7 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         pageReady = true
         showPageView(forTab: tab)
+        pushStravaSetting()
         importPending()
         Task { await refreshSettings() }
     }
@@ -132,6 +137,11 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
     }
 
     // MARK: calls into the page
+
+    func pushStravaSetting() {
+        guard pageReady else { return }
+        webView.evaluateJavaScript("window.appSetStrava && appSetStrava(\(stravaEnabled)); 0")
+    }
 
     /// Show the page view that belongs to an app tab (0 Latest Run, 1 Analysis, 2 All Runs).
     func showPageView(forTab t: Int) {
