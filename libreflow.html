@@ -1,0 +1,1256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LibreFlow</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --ink:#1b1f24; --muted:#5f6b7a; --line:#e3e7ec;
+  --accent:#d6402b; --accent2:#2b6cd6; --accent3:#2a9d6b; --warn:#c98a00; --bad:#c62f2f;
+  --good-bg:#e8f6ef; --warn-bg:#fdf4e1; --bad-bg:#fbe9e9; --info-bg:#eaf1fc;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121417; --card:#1b1e23; --ink:#e8ebef; --muted:#9aa4b1; --line:#2c3138;
+    --accent:#ff6a52; --accent2:#6fa2ff; --accent3:#4cc994; --warn:#f0b43c; --bad:#ff6b6b;
+    --good-bg:#16302a; --warn-bg:#352b14; --bad-bg:#3a1c1c; --info-bg:#1a2740;
+  }
+}
+*{box-sizing:border-box}
+html{touch-action:manipulation}   /* no double-tap zoom; pinch-to-zoom still works */
+@media (pointer:coarse){input,select,textarea{font-size:16px}}   /* iOS zooms in on focus below 16px */
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:28px 16px 8px;max-width:1200px;margin:0 auto}
+h1{margin:0;font-size:26px;letter-spacing:-.02em}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);margin:4px 0 0}
+main{max-width:1200px;margin:0 auto;padding:8px 16px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0}
+.card h2{margin:0 0 4px;font-size:17px}
+.card .hint{color:var(--muted);font-size:13px;margin:0 0 12px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr))}
+.grid .card{margin:0}
+.kpis{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.kpi small{color:var(--muted)}
+button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 14px;cursor:pointer}
+button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:hover,.btn:hover{filter:brightness(1.05)}
+input[type=number],select{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:22px;text-align:center}
+.drop.over{border-color:var(--accent)}
+.chart{position:relative;height:280px}
+.advice{display:grid;gap:6px}
+.adv{border-radius:10px;padding:7px 12px;border-left:4px solid}
+.adv b{display:block}
+details.adv summary{cursor:pointer;font-weight:600;list-style:none;color:var(--ink)}
+details.adv summary::-webkit-details-marker{display:none}
+details.adv summary::after{content:" ›";color:var(--muted);font-weight:400}
+details.adv[open] summary::after{content:" ⌄"}
+details.adv div{margin-top:4px;font-size:14px}
+.adv.good{background:var(--good-bg);border-color:var(--accent3)}
+.adv.warn{background:var(--warn-bg);border-color:var(--warn)}
+.adv.bad{background:var(--bad-bg);border-color:var(--bad)}
+.adv.info{background:var(--info-bg);border-color:var(--accent2)}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:600}
+.tablewrap{overflow-x:auto;max-height:440px}
+.sports label{display:inline-flex;gap:6px;align-items:center;margin:2px 12px 2px 0}
+#status{color:var(--muted);font-size:14px}
+.hidden{display:none}
+/* inside the iPhone app: loading and settings live in the app's Settings tab */
+/* in the iPhone app the views are the app's own tabs; settings live in the app's Settings tab */
+.in-app #settingsView,.in-app header,.in-app #tabs{display:none}
+.in-app main{padding-top:0}
+/* Mac: two views, Analysis and Settings */
+#tabs{max-width:1200px;margin:12px auto 0;padding:0 16px;display:flex;gap:6px}
+#tabs button{border-radius:999px}
+#tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+/* views: Run (latest / selected run), Trends, Runs (list), Settings */
+body:not([data-view=run]) #vRun,body:not([data-view=trends]) #vTrends,body:not([data-view=runs]) #vRuns,
+body:not([data-view=settings]) #settingsView,body[data-view=settings] #app,body[data-view=settings] #appEmpty{display:none}
+#tabs{flex-wrap:wrap}
+#prs,#pred,#records{overflow-x:auto}
+#prs td,#records td{white-space:normal}
+/* shoes */
+.shoe{padding:9px 0;border-bottom:1px solid var(--line)}
+.shoe:last-child{border-bottom:0}
+.shoe.retired{opacity:.7}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%}
+button.small{padding:3px 10px;font-size:13px}
+button.danger{color:var(--bad)}
+input[type=text],input[type=date]{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);width:min(560px,calc(100vw - 32px));padding:18px}
+dialog::backdrop{background:#0007}
+.formGrid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin:10px 0}
+.formGrid label{display:flex;flex-direction:column;gap:4px;font-size:14px}
+fieldset{border:1px solid var(--line);border-radius:10px;margin:10px 0}
+fieldset label{display:inline-flex;gap:6px;align-items:center;margin:2px 12px 2px 0;font-size:14px}
+#runsTbl tr[data-i]{cursor:pointer}
+#runsTbl tr[data-i]:hover td{background:var(--info-bg)}
+#runsTbl tr.deep td:first-child::after{content:" •";color:var(--accent3)}
+details summary{cursor:pointer;color:var(--accent2)}
+ol{padding-left:20px}
+</style>
+</head>
+<body data-view="run">
+<header>
+  <h1>Libre<span>Flow</span></h1>
+  <p class="sub">Your own Polar history, analysed locally. Nothing is uploaded: everything stays on this device.</p>
+</header>
+<nav id="tabs"><button data-view="run" class="on">Latest Run</button><button data-view="trends">Analysis</button><button data-view="runs">All Runs</button><button data-view="settings">Settings</button></nav>
+<main>
+
+<div class="adv warn hidden" id="noStore"><b>This view cannot store anything</b>
+  Storage is not available here (for example in a preview pane). Imports work, but are gone after a reload.
+  Open <code>libreflow.html</code> in Safari or Chrome (double-click it in the Finder) to keep your data.
+  </div>
+<div id="settingsView">
+<section class="card" id="loader">
+  <h2>Import</h2>
+  <p class="hint">Choose the Polar export ZIP or (faster for large exports) the unzipped folder, the <code>trainingen_json</code> folder from the watch, or a backup file.
+    Every import is added to what is already there (duplicates are skipped) and stored only on this device.</p>
+  <div class="drop" id="drop">
+    <div class="row" style="justify-content:center">
+      <label class="btn primary">Choose file<input type="file" id="fZip" accept=".zip,.json" multiple hidden></label>
+      <label class="btn">Choose folder<input type="file" id="fDir" webkitdirectory multiple hidden></label>
+      <button id="btnDemo">Try with demo data</button>
+      <button id="btnBackup" class="hidden">Make backup</button>
+      <button id="btnClear" class="hidden">Delete stored data</button>
+    </div>
+    <p class="hint" style="margin:10px 0 0">…or drop the files here.</p>
+  </div>
+  <p id="status"></p>
+  <details>
+    <summary>How do I get my full Polar history?</summary>
+    <ol>
+      <li>Sign in at <b>account.polar.com</b> (the same account as Polar Flow).</li>
+      <li>Choose <b>“Download your data”</b> and request the export.</li>
+      <li>You get an e-mail with a download link to a ZIP containing <code>training-session-*.json</code> files.</li>
+      <li>Load that ZIP (or the unzipped folder) here. The iPhone app can import the same ZIP directly (Settings › Import file…).</li>
+    </ol>
+    <p class="hint">The Polar AccessLink API only returns trainings from the moment you connect; the export is the way to get your full history.</p>
+  </details>
+</section>
+  <section class="card hidden" id="settingsCard">
+    <h2>Heart rate and sports</h2>
+    <div class="row">
+      <label>Max heart rate <input type="number" id="hrMax" min="120" max="230" style="width:80px"></label>
+      <span class="hint" id="hrMaxHint" style="margin:0"></span>
+      <button id="btnCsv">Export as CSV</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label>Resting heart rate <input type="number" id="hrRest" min="30" max="100" style="width:70px"></label>
+      <label>Aerobic threshold <input type="number" id="aet" min="90" max="210" style="width:70px"></label>
+      <label>Anaerobic threshold <input type="number" id="ant" min="100" max="220" style="width:70px"></label>
+      <span class="hint" style="margin:0">From your Polar profile when the export contains it. Easy = below the aerobic threshold, hard = above the anaerobic threshold.</span>
+    </div>
+    <div class="sports" id="sports" style="margin-top:10px"></div>
+  </section>
+  <section class="card" id="shoesCard">
+    <div class="row" style="justify-content:space-between">
+      <div><h2>Shoes</h2><p class="hint" style="margin:0">Distance per pair. Runs count for the default shoes of their sport from the date the shoes are in use; change it per run under Latest Run.</p></div>
+      <button id="btnAddShoe">+ Add shoes</button>
+    </div>
+    <div id="shoeList" style="margin-top:8px"></div>
+  </section>
+
+</div>
+
+<div id="appEmpty" class="card hidden"><h2>No trainings yet</h2>
+  <p class="hint" style="margin:0" id="appEmptyText">Import your Polar export or a backup under <b>Settings</b>.</p></div>
+<div id="app" class="hidden">
+<div id="vRun">
+  <section class="card" id="runDetail">
+    <div class="row" style="justify-content:space-between"><h2 id="rdTitle"></h2>
+      <div class="row"><button id="rdPrev">‹ Older</button><button id="rdNext">Newer ›</button><button id="rdStrava" class="primary hidden">To Strava…</button></div></div>
+    <div class="kpis" id="rdKpis" style="margin:10px 0"></div>
+    <div class="row hidden" id="rdShoeRow" style="margin:0 0 10px"><label>Shoes <select id="rdShoe"></select></label>
+      <span class="hint" id="rdNoShoes" style="margin:0">No shoes yet – add them under Settings › Shoes.</span></div>
+    <div class="chart" style="height:320px"><canvas id="cRun"></canvas></div>
+    <div class="grid" style="margin-top:14px">
+      <div><h2 style="font-size:15px">Kilometres</h2><div class="tablewrap"><table id="rdSplits"></table></div></div>
+      <div><h2 style="font-size:15px">Time per zone</h2><div class="chart" style="height:200px"><canvas id="cRunZones"></canvas></div></div>
+    </div>
+  </section>
+
+</div>
+<div id="vRuns">
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <div><h2>Runs</h2><p class="hint" style="margin:0">Tap a run to open it.</p></div>
+      <select id="yearSel"></select>
+    </div>
+    <div class="tablewrap"><table id="runsTbl"></table></div>
+  </section>
+</div>
+<div id="vTrends">
+  <section class="card" id="adviceCard">
+    <h2>Advice</h2>
+    <p class="hint" id="adviceRef"></p>
+    <div class="advice" id="advice"></div>
+  </section>
+  <div class="kpis" id="kpis"></div>
+
+
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <div><h2>Weekly volume</h2><p class="hint">Km per week with 4-week average.</p></div>
+      <select id="weekRange"><option value="26">½ year</option><option value="52" selected>1 year</option><option value="156">3 years</option><option value="0">All</option></select>
+    </div>
+    <div class="chart"><canvas id="cWeek"></canvas></div>
+  </section>
+
+  <div class="grid">
+    <section class="card"><h2>Km per year</h2><p class="hint">Total and number of runs.</p><div class="chart"><canvas id="cYear"></canvas></div></section>
+    <section class="card"><h2>Seasonal pattern</h2><p class="hint">Average km per calendar month over all years.</p><div class="chart"><canvas id="cSeason"></canvas></div></section>
+    <section class="card"><h2>Pace trend</h2><p class="hint">Average pace per run (min/km) and monthly median.</p><div class="chart"><canvas id="cPace"></canvas></div></section>
+    <section class="card"><h2>Aerobic efficiency</h2><p class="hint">Metres per heartbeat (speed ÷ heart rate), monthly median. Higher = fitter.</p><div class="chart"><canvas id="cEff"></canvas></div></section>
+    <section class="card"><h2>Fitness (VDOT estimate)</h2><p class="hint">Best VDOT per quarter, from whole runs ≥ 3 km and best efforts.</p><div class="chart"><canvas id="cVdot"></canvas></div></section>
+    <section class="card"><h2>Intensity distribution</h2><p class="hint">Training time per month by heart rate zone (last 12 months).</p><div class="chart"><canvas id="cInt"></canvas></div></section>
+  </div>
+
+  <h2 style="margin:26px 0 0">Deeper analysis <span class="hint" id="deepHint" style="font-weight:400;font-size:14px"></span></h2>
+  <section class="card">
+    <div class="row" style="justify-content:space-between">
+      <div><h2>Fitness, fatigue and form</h2><p class="hint">Training load (TRIMP from your per-second heart rate, all sports). Fitness = 6-week average, fatigue = 1-week average, form = the difference.</p></div>
+      <select id="loadRange"><option value="90">3 months</option><option value="365" selected>1 year</option><option value="0">All</option></select>
+    </div>
+    <div class="chart"><canvas id="cLoad"></canvas></div>
+  </section>
+  <div class="grid">
+    <section class="card"><h2>Best efforts within runs</h2><p class="hint">Fastest 1 km, 5 km and 10 km anywhere within a run, best per quarter (min/km).</p><div class="chart"><canvas id="cBest"></canvas></div></section>
+    <section class="card"><h2>Aerobic decoupling</h2><p class="hint">How much your efficiency (pace per heartbeat) drops in the second half, runs ≥ 40 min. Below 5% = strong aerobic base.</p><div class="chart"><canvas id="cDec"></canvas></div></section>
+    <section class="card"><h2>Polar running index</h2><p class="hint">Polar's own fitness estimate per run, monthly median.</p><div class="chart"><canvas id="cRi"></canvas></div></section>
+    <section class="card"><h2>Cadence</h2><p class="hint">Steps per minute, monthly median.</p><div class="chart"><canvas id="cCad"></canvas></div></section>
+  </div>
+  <section class="card"><h2>Personal records within runs</h2><p class="hint">From the per-second distance data, so a fast 5 km in the middle of a long run counts too.</p><div id="prs"></div></section>
+
+  <div class="grid" style="margin-top:14px">
+    <section class="card"><h2>Predictions & training paces</h2><p class="hint" id="predHint"></p><div id="pred"></div></section>
+    <section class="card"><h2>Records</h2><p class="hint">Based on whole runs.</p><div id="records"></div></section>
+  </div>
+</div>
+
+</div>
+<dialog id="shoeDlg"><form method="dialog" id="shoeForm">
+  <h2 id="shoeDlgTitle" style="margin:0">Add shoes</h2>
+  <div class="formGrid">
+    <label>Brand <input type="text" id="shBrand" required></label>
+    <label>Model <input type="text" id="shModel" required></label>
+    <label>Nickname <input type="text" id="shName" placeholder="optional"></label>
+    <label>In use since <input type="date" id="shFrom" required></label>
+    <label>Remind me at (km, 0 = off) <input type="number" id="shAlert" min="0" step="50"></label>
+    <label>Distance before tracking (km) <input type="number" id="shStart" min="0" step="1"></label>
+  </div>
+  <fieldset><legend class="hint">Default shoes for</legend><div id="shSports"></div></fieldset>
+  <label style="font-size:14px"><input type="checkbox" id="shRetired"> Retired (no longer used for new runs)</label>
+  <div class="row" style="margin-top:14px">
+    <button value="save" class="primary">Save</button>
+    <button value="cancel" formnovalidate>Cancel</button>
+    <span style="flex:1"></span>
+    <button type="button" id="shDelete" class="danger">Delete</button>
+  </div>
+</form></dialog>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+let ALL = [], RUNS = [], selected = new Set(), charts = {}, hrMax = null;
+
+/* ---------- helpers ---------- */
+const num = v => { if (v == null || v === '') return null; const n = +v; return isFinite(n) ? n : null; };
+function parseDur(d){
+  if (d == null) return null;
+  if (typeof d === 'number') return d > 172800 ? d/1000 : d;
+  const s = String(d);
+  let m = /^P(?:([\d.]+)D)?(?:T(?:([\d.]+)H)?(?:([\d.]+)M)?(?:([\d.]+)S)?)?$/.exec(s);
+  if (m) return (+(m[1]||0))*86400 + (+(m[2]||0))*3600 + (+(m[3]||0))*60 + (+(m[4]||0));
+  m = /^(\d+):(\d+):([\d.]+)$/.exec(s);
+  if (m) return m[1]*3600 + m[2]*60 + +m[3];
+  return null;
+}
+const pad = n => String(n).padStart(2,'0');
+function fmtTime(sec){ sec = Math.round(sec); const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60; return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`; }
+const fmtPace = spk => spk && isFinite(spk) ? `${Math.floor(spk/60)}:${pad(Math.round(spk%60)%60)}` : '–';
+const fmtDate = d => d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+const fmtNum = (n,d=0) => n.toLocaleString('en-GB',{minimumFractionDigits:d,maximumFractionDigits:d});
+const median = a => { if(!a.length) return null; const s=[...a].sort((x,y)=>x-y), i=s.length>>1; return s.length%2 ? s[i] : (s[i-1]+s[i])/2; };
+const DAY = 864e5;
+const dayStart = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+function monday(d){ const x = dayStart(d); x.setDate(x.getDate() - (x.getDay()+6)%7); return x; }
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+/* ---------- parsing Polar export ---------- */
+// Polar sport ids (Polar Flow export uses {sport:{id:"1"}})
+const SPORT_IDS = {1:'RUNNING', 2:'CYCLING', 3:'WALKING', 4:'JOGGING', 5:'MOUNTAIN_BIKING', 9:'NORDIC_WALKING', 11:'HIKING',
+  15:'STRENGTH_TRAINING', 16:'OTHER_OUTDOOR', 17:'TREADMILL_RUNNING', 27:'TRAIL_RUNNING'};
+const isRunSport = s => /RUN|LOOP|JOG/.test(s);
+function sportName(x){
+  if (x == null) return '';
+  let s = typeof x === 'object' ? String(x.name || x.value || x.id || '') : String(x);
+  if (/^\d+$/.test(s)) s = SPORT_IDS[+s] || 'SPORT_' + s;
+  return s.toUpperCase();
+}
+let PROFILE = {};          // from the newest Polar Flow file (physicalInformation + HR zones); overridable in settings
+let importProfile = null;  // newest profile seen in the current import
+
+function statOf(ex, type){ return (ex.statistics?.statistics || []).find(s => s.type === 'STATISTICS_TYPE_' + type) || {}; }
+
+function toSession(j){
+  if (!j || typeof j !== 'object') return null;
+  const exs = Array.isArray(j.exercises) ? j.exercises : [];
+  const ex = exs[0] || {};
+  const start = j.startTime || j.start || ex.startTime;
+  if (!start) return null;
+  const date = new Date(start); if (isNaN(date)) return null;
+  const sum = (...ks) => { const v = exs.map(e => ks.map(k => num(e[k])).find(x => x != null)).filter(v => v != null); return v.length ? v.reduce((a,b)=>a+b,0) : null; };
+  const sport = sportName(j.sport ?? ex.sport) || 'ONBEKEND';
+  const dist = num(j.distance) ?? num(j.distanceMeters) ?? sum('distance','distanceMeters') ?? 0;
+  let sec = parseDur(j.duration) ?? (num(j.durationMillis) != null ? j.durationMillis/1000 : null)
+         ?? (exs.length ? exs.reduce((a,e)=>a+(parseDur(e.duration) ?? (num(e.durationMillis)||0)/1000),0) : null);
+  if (!sec && j.stopTime) sec = (new Date(j.stopTime) - date)/1000;
+  if (!sec || sec < 60) return null;
+  const hr = ex.heartRate || {};
+  const s = {
+    date, sport, km: dist/1000, sec,
+    hrAvg: num(j.averageHeartRate) ?? num(j.hrAvg) ?? num(hr.avg) ?? num(hr.average) ?? num(statOf(ex,'HEART_RATE').avg),
+    hrMax: num(j.maximumHeartRate) ?? num(j.hrMax) ?? num(hr.max) ?? num(hr.maximum) ?? num(statOf(ex,'HEART_RATE').max),
+    ascent: num(j.ascent) ?? sum('ascent','ascentMeters'),
+    kcal: num(j.kiloCalories) ?? num(j.calories) ?? sum('kiloCalories','calories'),
+    cad: num(ex.cadence?.avg) ?? num(statOf(ex,'CADENCE').avg),
+    wid: j.watchId || null,                                              // set by the iPhone app: raw files kept on the phone
+    ri: num(ex.runningIndex),                                            // Polar running index
+    vmax: num(ex.speed?.max) ?? num(statOf(ex,'SPEED').max),             // max speed km/h as computed by Polar (Flow's "max pace")
+    load: num(j.trainingLoadReport?.cardioLoad) ?? num(ex.trainingLoadReport?.cardioLoad),
+    name: j.name || j.note || ''
+  };
+  // profile (newest file wins)
+  const pi = j.physicalInformation;
+  if (pi && (!importProfile || date > importProfile.date)){
+    const hz = (ex.zones || []).find(z => z.type === 'ZONE_TYPE_HEART_RATE');
+    importProfile = {date, hrMax: num(pi.maximumHeartRate), hrRest: num(pi.restingHeartRate), aet: num(pi.aerobicThreshold),
+      ant: num(pi.anaerobicThreshold), vo2max: num(pi.vo2Max), male: pi.sex !== 'SEX_FEMALE',
+      zones: hz ? hz.zones.slice(1).map(z => num(z.lowerLimit)).filter(v => v) : null};
+  }
+  const ser = seriesOf(ex);
+  if (ser) s.deep = deepMetrics(ser, isRunSport(sport));
+  if (isRunSport(sport) && s.cad && s.cad < 120) s.cad *= 2;   // per leg -> steps per minute
+  return s;
+}
+
+/* ---------- 1 s series -> compact per-run metrics ---------- */
+function seriesOf(ex){
+  const fl = ex.samples?.samples;
+  if (Array.isArray(fl)){                       // Polar Flow export
+    const get = t => { const x = fl.find(s => s.type === t); return x ? x.values.map(v => { const n = +v; return isFinite(n) ? n : null; }) : null; };
+    const iv = (fl[0]?.intervalMillis || 1000) / 1000;
+    const hr = get('HEART_RATE'), v = get('SPEED');
+    if (!hr && !v) return null;
+    return {iv, hr, v, d: get('DISTANCE'), cad: get('CADENCE'), alt: get('ALTITUDE')};
+  }
+  const w = ex.samples;                         // polar_ble.py export
+  if (w && (w.heartRate?.length || w.speed?.length))
+    return {iv: w.intervalSec || 1, hr: w.heartRate, v: w.speed, d: w.distance, cad: w.cadence, alt: w.altitude};
+  return null;
+}
+
+const HB0 = 60, HBW = 2, HBN = 75;   // HR histogram: 2-bpm bins from 60 to 210
+function deepMetrics(S, isRun){
+  const n = Math.max(S.hr?.length || 0, S.v?.length || 0), iv = S.iv;
+  const at = (a, i) => a && a[i] != null && isFinite(a[i]) ? a[i] : null;
+  const hist = Array(HBN).fill(0);
+  const movMin = isRun ? 4 : 2;                 // km/h
+  let cadMed = null;
+  if (S.cad){ const c = S.cad.filter(x => x > 20); cadMed = median(c); }
+  const cadF = isRun && cadMed && cadMed < 120 ? 2 : 1;
+  // monotonic distance
+  let dist = null;
+  if (S.d){ dist = new Array(n); let m = 0; for (let i = 0; i < n; i++){ const x = at(S.d, i); if (x != null && x > m) m = x; dist[i] = m; } }
+  let movSec = 0, sv = 0, sh = 0, nh = 0;
+  const mv = [];                                // moving samples with HR: [t, speed, hr]
+  for (let i = 0; i < n; i++){
+    const h = at(S.hr, i), v = at(S.v, i);
+    if (h && h > 30 && h < 230){ const b = Math.min(HBN-1, Math.max(0, Math.floor((h - HB0)/HBW))); hist[b] += iv; }
+    if (v != null && v >= movMin){ movSec += iv; if (h && h > 30){ sv += v; sh += h; nh++; mv.push([i*iv, v, h]); } }
+  }
+  const d = {hist: hist.map(x => Math.round(x)), mov: Math.round(movSec)};
+  if (nh > 60) d.ef = +((sv/nh)*1000/60 / (sh/nh)).toFixed(4);           // m/min per beat
+  // aerobic decoupling (Pa:HR): skip first 10 min, compare halves
+  const steady = mv.filter(x => x[0] >= 600);
+  if (steady.length * iv >= 30*60){
+    const half = steady.length >> 1, ef = a => a.reduce((s,x)=>s+x[1],0) / a.reduce((s,x)=>s+x[2],0);
+    const e1 = ef(steady.slice(0, half)), e2 = ef(steady.slice(half));
+    d.dec = +((e1 - e2)/e1*100).toFixed(1);
+  }
+  // best efforts within the run
+  if (dist && dist[n-1] >= 1000){
+    d.best = {};
+    // After a GPS gap or missing samples the distance jumps while the elapsed time is not in the series.
+    // Count such a jump (> 6 m/s) as covered at this run's median moving speed instead of in one second.
+    const vMed = (median(mv.map(x => x[1])) || 10) / 3.6;
+    const T = new Float64Array(n);
+    for (let j = 1; j < n; j++){ const step = dist[j] - dist[j-1]; T[j] = T[j-1] + (step > 6*iv ? Math.max(iv, step/vMed) : iv); }
+    for (const D of [1000, 5000, 10000, 21097]){
+      if (dist[n-1] < D) break;
+      let i = 0, best = Infinity;
+      for (let j = 0; j < n; j++){ while (i < j && dist[j] - dist[i+1] >= D) i++; if (dist[j] - dist[i] >= D) best = Math.min(best, T[j] - T[i]); }
+      best = Math.round(best);
+      if (isFinite(best) && best > D/1000*120) d.best[D] = best;               // ignore impossible (<2:00/km)
+    }
+  }
+  // km splits [sec, avg HR, cadence]
+  if (dist && dist[n-1] >= 1000){
+    d.splits = []; let k = 1, i0 = 0;
+    for (let j = 0; j < n && d.splits.length < 60; j++){
+      if (dist[j] >= k*1000){
+        let hs = 0, hn = 0, cs = 0, cn = 0;
+        for (let i = i0; i <= j; i++){ const h = at(S.hr,i), c = at(S.cad,i); if (h > 30){ hs += h; hn++; } if (c > 20){ cs += c; cn++; } }
+        d.splits.push([Math.round((j - i0)*iv), hn ? Math.round(hs/hn) : null, cn ? Math.round(cs/cn*cadF) : null]);
+        i0 = j; k++;
+      }
+    }
+  }
+  // 30 s downsampled series for the run detail view
+  const step = Math.max(1, Math.round(30/iv)), avg = (a, i, f=1) => { if (!a) return null; let s = 0, c = 0; for (let k = i; k < Math.min(n, i+step); k++){ const x = at(a,k); if (x != null && x > 0){ s += x; c++; } } return c ? Math.round(s/c*f) : null; };
+  const avgAlt = i => { if (!S.alt) return null; let s = 0, c = 0; for (let k = i; k < Math.min(n, i+step); k++){ const x = at(S.alt,k); if (x != null){ s += x; c++; } } return c ? Math.round(s/c) : null; };
+  d.s = {iv: step*iv, hr: [], v: [], alt: [], cad: []};
+  for (let i = 0; i < n; i += step){ d.s.hr.push(avg(S.hr,i)); d.s.v.push(avg(S.v,i,10)); d.s.alt.push(avgAlt(i)); d.s.cad.push(avg(S.cad,i,cadF)); }
+  for (const k of ['hr','v','alt','cad']) if (d.s[k].every(x => x == null)) delete d.s[k];
+  return d;
+}
+
+async function loadFiles(fileList){
+  const files = [...fileList];
+  const entries = [];
+  status('Reading files…');
+  try {
+    for (const f of files){
+      if (/\.zip$/i.test(f.name)){
+        status(`Opening ZIP (${fmtNum(f.size/1048576)} MB)…`);
+        const zip = await JSZip.loadAsync(f);
+        zip.forEach((p,e) => { if (!e.dir && /\.json$/i.test(p)) entries.push({name:p, text:() => e.async('string')}); });
+      } else if (/\.json$/i.test(f.name)) entries.push({name: f.webkitRelativePath || f.name, text: () => f.text()});
+    }
+  } catch(err){ status('Could not open the ZIP (too large?). Unzip it and choose the folder. Error: ' + err.message); return; }
+  return importEntries(entries);
+}
+
+// also called by the iPhone app with the JSON texts of freshly synced watch trainings
+window.appImport = texts => importEntries(texts.map((t, i) => ({name: `training-session-${i}.json`, text: async () => t})));
+
+async function importEntries(entries){
+  let cands = entries.filter(e => /training[-_]?session|backup/i.test(e.name));
+  if (!cands.length) cands = entries;
+  if (!cands.length){ status('No JSON files found. Is this a Polar export or backup?'); return; }
+  const out = []; let fail = 0;
+  for (let i = 0; i < cands.length; i++){
+    if (i % 20 === 0){ status(`Processing trainings: ${i}/${cands.length}`); await new Promise(r => setTimeout(r)); }
+    try {
+      const j = JSON.parse(await cands[i].text());
+      if (j && [BACKUP_FORMAT, ...OLD_BACKUP_FORMATS].includes(j.format) && Array.isArray(j.sessions)){   // backup made with "Make backup"
+        j.sessions.forEach(s => out.push({...s, date: new Date(s.date)}));
+        if (j.profile && !PROFILE.date) PROFILE = j.profile;
+        if (Array.isArray(j.gear) && !GEAR.length){ GEAR = j.gear; ASSIGN = {...(j.assign || {}), ...ASSIGN}; }
+        continue;
+      }
+      for (const x of (Array.isArray(j) ? j : [j])){ const s = toSession(x); s ? out.push(s) : fail++; }
+    } catch { fail++; }
+  }
+  if (!out.length){ status(`No trainings recognised in ${cands.length} files. The format may differ.`); return; }
+  const before = isDemo ? [] : ALL;
+  const merged = dedupe([...before, ...out]);
+  const added = merged.length - before.length;
+  if (importProfile && (!PROFILE.date || importProfile.date >= new Date(PROFILE.date)))
+    PROFILE = {...PROFILE, ...Object.fromEntries(Object.entries(importProfile).filter(([k,v]) => v != null && !(PROFILE.userSet||[]).includes(k))), date: +importProfile.date};
+  importProfile = null;
+  isDemo = false;
+  start(merged);
+  showView('run');   // show the newest run right away
+  const saved = saveStore();
+  status(`${out.length} trainings read: ${added} new, ${out.length - added} already present. Total ${merged.length}.` +
+    ` ${ALL.filter(s => s.deep).length} with per-second data for deeper analysis.` +
+    (fail ? ` ${fail} files skipped.` : '') + (saved ? ' Saved on this device' + storeNote + '.' : ' Note: saving failed.'));
+}
+
+/* ---------- remembered data (only in this browser, localStorage) ---------- */
+const STORE = 'libreflow.v1', OLD_STORES = ['run-analysis.v1', 'hardloop-analyse.v1'];   // older keys: moved over once
+let isDemo = false, userHrMax = null;
+const sessionKey = s => Math.round(s.date.getTime() / 60000);   // same start minute = same training
+// same training twice (watch + Polar Flow, or imported again): keep one record, fill gaps from the other.
+// The later one in the list (newest import) wins, unless it is clearly poorer (no 1 s data or no distance).
+function dedupe(list){
+  const map = new Map();
+  for (const s of list){
+    const k = sessionKey(s), o = map.get(k);
+    if (!o){ map.set(k, s); continue; }
+    const [a, b] = (o.deep && !s.deep) || (o.km && !s.km) ? [o, s] : [s, o];
+    for (const f of Object.keys(b)) if (a[f] == null || a[f] === 0 || a[f] === '') a[f] = b[f];
+    map.set(k, a);
+  }
+  return [...map.values()];
+}
+const FIELDS = ['sport','km','sec','hrAvg','hrMax','ascent','kcal','cad','ri','vmax','load','name','deep','wid'];
+const BACKUP_FORMAT = 'libreflow-backup', OLD_BACKUP_FORMATS = ['run-analysis-backup', 'hardloop-analyse-backup'];
+const APP = window.webkit?.messageHandlers?.libreflow;   // running inside the iPhone app
+const pack = withSeries => JSON.stringify({v: 2, format: BACKUP_FORMAT, hrMax: userHrMax, profile: PROFILE, gear: GEAR, assign: ASSIGN, sessions: ALL.map(s => {
+  const o = {date: s.date.getTime()}; for (const f of FIELDS) if (s[f] != null) o[f] = s[f];
+  if (o.deep && !withSeries){ o.deep = {...o.deep}; delete o.deep.s; }
+  return o; })});
+function saveFile(name, text, type){
+  if (APP){ APP.postMessage({cmd: 'share', name, text}); return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click();
+}
+function saveStore(){
+  if (isDemo) return false;
+  if (APP){ APP.postMessage({cmd: 'store', text: pack(true)}); storeNote = ''; return true; }
+  try { localStorage.setItem(STORE, pack(true)); storeNote = ''; return true; }
+  catch {
+    try { localStorage.setItem(STORE, pack(false)); storeNote = ' (without per-run chart series: storage full)'; return true; }
+    catch { return false; }
+  }
+}
+let storeNote = '';
+function loadStore(){
+  try {
+    const j = JSON.parse((APP ? window.__LIBREFLOW_STORE : localStorage.getItem(STORE)) || 'null');
+    if (!j || !Array.isArray(j.sessions)) return null;
+    return {sessions: j.sessions.map(s => ({...s, date: new Date(s.date)})), hrMax: j.hrMax || null, profile: j.profile || {},
+      gear: Array.isArray(j.gear) ? j.gear : [], assign: j.assign || {}};
+  } catch { return null; }
+}
+try { for (const k of OLD_STORES) if (!localStorage.getItem(STORE) && localStorage.getItem(k)){ localStorage.setItem(STORE, localStorage.getItem(k)); localStorage.removeItem(k); } } catch {}
+function storageWorks(){ if (APP) return true; try { localStorage.setItem(STORE + '.t', '1'); localStorage.removeItem(STORE + '.t'); return true; } catch { return false; } }
+function clearStore(skipConfirm){
+  if (!skipConfirm && !confirm('Delete all stored trainings from this device? Raw watch files are kept.')) return;
+  if (APP) APP.postMessage({cmd: 'store', text: ''});
+  try { localStorage.removeItem(STORE); } catch {}
+  ALL = []; RUNS = []; userHrMax = null; isDemo = false; PROFILE = {}; GEAR = []; ASSIGN = {};
+  Object.values(charts).forEach(c => c.destroy()); charts = {};
+  $('#app').classList.add('hidden');
+  $('#appEmpty').classList.remove('hidden');
+  $('#settingsCard').classList.add('hidden');
+  $('#btnClear').classList.add('hidden');
+  status('Stored data deleted.');
+}
+
+/* ---------- demo data ---------- */
+function demoData(){
+  let seed = 42; const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
+  const out = [], today = dayStart(new Date()), first = new Date(today); first.setFullYear(first.getFullYear()-8);
+  const injury = new Date(today.getTime() - 3.2*365*DAY);
+  for (let d = new Date(first); d <= today; d = new Date(d.getTime()+DAY)){
+    const yrs = (d - first)/(365*DAY), wd = d.getDay();
+    if (d > injury && d < injury.getTime() + 50*DAY) continue;
+    const winter = [11,0,1].includes(d.getMonth()) ? 0.75 : 1;
+    const p = [0.85,0.15,0.6,0.15,0.6,0.1,0.45][wd] * winter * Math.min(1, 0.6 + yrs*0.1);
+    if (rnd() > p) continue;
+    const fit = Math.min(1, yrs/6) - (d > injury && d < injury.getTime()+200*DAY ? 0.2 : 0);
+    let km, pace, hr;
+    if (wd === 0){ km = 12 + yrs*1.3 + rnd()*5; pace = 350 - fit*35 + rnd()*15; hr = 145 + rnd()*8; }
+    else if (wd === 3 && rnd() < .7){ km = 8 + rnd()*4; pace = 300 - fit*35 + rnd()*10; hr = 164 + rnd()*8; }
+    else { km = 6 + rnd()*5 + yrs*0.3; pace = 340 - fit*30 + rnd()*20; hr = 142 + rnd()*12; }
+    const date = new Date(d.getTime() + (7 + rnd()*12)*3600e3);
+    out.push({date, sport:'RUNNING', km, sec: km*pace, hrAvg: Math.round(hr), hrMax: Math.round(hr + 12 + rnd()*10), ascent: Math.round(km*rnd()*8), kcal: Math.round(km*70), cad: Math.round(166+rnd()*10), name:''});
+    if (rnd() < .08) out.push({date: new Date(date.getTime()+DAY/2), sport:'CYCLING', km: 30+rnd()*40, sec: 3600*(1.2+rnd()), hrAvg:128, hrMax:150, ascent:150, kcal:900, cad:null, name:''});
+  }
+  return out;
+}
+
+/* ---------- main flow ---------- */
+function start(sessions){
+  ALL = dedupe(sessions).sort((a,b) => a.date - b.date);
+  // running cadence below 120 is per leg (strides/min): show steps per minute, like Polar Flow
+  ALL.forEach(s => { if (s.cad && s.cad < 120 && /RUN|LOOP|JOG/.test(s.sport)) s.cad *= 2; });
+  $('#btnClear').classList.toggle('hidden', isDemo || !ALL.length);
+  $('#btnBackup').classList.toggle('hidden', isDemo || !ALL.length);
+  const counts = {};
+  ALL.forEach(s => counts[s.sport] = (counts[s.sport]||0) + 1);
+  const sportsList = Object.keys(counts).sort((a,b) => counts[b]-counts[a]);
+  selected = new Set(sportsList.filter(s => /RUN|LOOP|JOG/.test(s)));
+  if (!selected.size) selected.add(sportsList[0]);
+  $('#sports').innerHTML = '<span class="hint">Include sports: </span>' + sportsList.map(s =>
+    `<label><input type="checkbox" value="${s}" ${selected.has(s)?'checked':''}> ${s.replace(/_/g,' ').toLowerCase()} (${counts[s]})</label>`).join('');
+  $('#sports').querySelectorAll('input').forEach(cb => cb.onchange = () => { cb.checked ? selected.add(cb.value) : selected.delete(cb.value); refresh(); });
+  hrMax = isDemo ? null : userHrMax;
+  $('#app').classList.remove('hidden');
+  $('#appEmpty').classList.add('hidden');
+  $('#settingsCard').classList.remove('hidden');
+  refresh();
+  if (!APP) $('#kpis').scrollIntoView({behavior:'smooth'});
+}
+
+function estimateHrMax(runs){
+  const last = runs.length ? runs[runs.length-1].date : new Date();
+  const v = runs.filter(r => r.hrMax && r.hrMax < 225 && last - r.date < 3*365*DAY).map(r => r.hrMax).sort((a,b)=>a-b);
+  return v.length ? v[Math.floor(v.length*0.98)] || v[v.length-1] : null;
+}
+
+function refresh(){
+  RUNS = ALL.filter(s => selected.has(s.sport) && s.km > 0.3);
+  RUNS.forEach(r => r.pace = r.sec / r.km);
+  const est = estimateHrMax(RUNS);
+  if (!hrMax) hrMax = PROFILE.hrMax || est || 190;
+  P = prof();
+  $('#hrMax').value = hrMax;
+  $('#hrRest').value = P.hrRest; $('#aet').value = P.aet; $('#ant').value = P.ant;
+  $('#hrMaxHint').textContent = PROFILE.hrMax ? `(from your Polar profile${est ? `; highest measured: ${est}` : ''})`
+    : est ? `(estimated from your data: ${est}; adjust if you know your real max)` : '(no heart rate data found)';
+  if (!RUNS.length){ $('#kpis').innerHTML = '<p>No runs for this selection.</p>'; return; }
+  const A = analyse(RUNS);
+  renderKpis(A); renderAdvice(A); renderShoes(); renderCharts(A); renderDeep(A); renderPred(A); renderRecords(A); renderTable();
+  if (!CUR_RUN || !RUNS.includes(CUR_RUN)) showRun(RUNS[RUNS.length-1]);   // open on the newest run
+  else showRun(CUR_RUN);
+}
+
+/* ---------- analysis ---------- */
+function vdot(m, sec){
+  const t = sec/60, v = m/t;
+  const vo2 = -4.6 + 0.182258*v + 0.000104*v*v;
+  const pct = 0.8 + 0.1894393*Math.exp(-0.012778*t) + 0.2989558*Math.exp(-0.1932605*t);
+  return vo2/pct;
+}
+const velAtVO2 = vo2 => { const a=0.000104, b=0.182258, c=-4.6-vo2; return (-b + Math.sqrt(b*b-4*a*c))/(2*a); }; // m/min
+function predictTime(V, m){ let lo = 60, hi = 60*60*10; for (let i=0;i<60;i++){ const mid=(lo+hi)/2; vdot(m,mid) > V ? lo = mid : hi = mid; } return (lo+hi)/2; }
+const okPace = r => r.pace > 150 && r.pace < 900;
+// 3-zone model: easy < aerobic threshold (AeT) <= moderate < anaerobic threshold (AnT) <= hard
+function prof(){
+  const mx = hrMax || PROFILE.hrMax || 190;
+  return {hrMax: mx, hrRest: PROFILE.hrRest || 55, aet: PROFILE.aet || Math.round(mx*.80), ant: PROFILE.ant || Math.round(mx*.88), male: PROFILE.male !== false};
+}
+let P = prof();
+const zoneOfHr = h => h < P.aet ? 0 : h < P.ant ? 1 : 2;
+const zoneOf = r => r.hrAvg ? zoneOfHr(r.hrAvg) : null;
+const binMid = b => HB0 + b*HBW + HBW/2;
+// seconds per zone; from the 1 s histogram when available, else the whole run at its average HR
+function zoneSec(r){
+  const z = [0,0,0];
+  if (r.deep?.hist){ r.deep.hist.forEach((s,b) => { if (s) z[zoneOfHr(binMid(b))] += s; }); return z; }
+  const k = zoneOf(r); if (k != null) z[k] = r.sec; return z;
+}
+// Banister TRIMP
+function trimp(r){
+  const k = P.male ? 1.92 : 1.67, rng = P.hrMax - P.hrRest;
+  const f = h => { const x = Math.min(1, Math.max(0, (h - P.hrRest)/rng)); return x*0.64*Math.exp(k*x); };
+  if (r.deep?.hist && r.deep.hist.some(x => x)) return r.deep.hist.reduce((a,s,b) => a + s/60*f(binMid(b)), 0);
+  return r.hrAvg ? r.sec/60*f(r.hrAvg) : 0;
+}
+const runVdot = r => {
+  let v = r.km >= 3 && okPace(r) && r.sec/60 >= 12 && r.sec/60 <= 300 ? vdot(r.km*1000, r.sec) : null;
+  for (const [D, t] of Object.entries(r.deep?.best || {})) if (+D >= 5000){ const x = vdot(+D, t); if (!v || x > v) v = x; }
+  return v;
+};
+
+function analyse(runs){
+  const ref = dayStart(runs[runs.length-1].date);
+  const refEnd = new Date(ref.getTime()+DAY);
+  const inLast = days => runs.filter(r => r.date >= refEnd - days*DAY && r.date < refEnd);
+  const kmIn = days => inLast(days).reduce((a,r)=>a+r.km,0);
+
+  // weeks
+  const weeks = []; const wmap = new Map();
+  for (let w = monday(runs[0].date); w <= ref; w = new Date(w.getTime()+7*DAY)){
+    const o = {start:new Date(w), km:0, n:0, sec:0, longest:0}; weeks.push(o); wmap.set(+monday(w), o);
+  }
+  runs.forEach(r => { const o = wmap.get(+monday(r.date)); if (o){ o.km += r.km; o.n++; o.sec += r.sec; o.longest = Math.max(o.longest, r.km); } });
+  weeks.forEach((w,i) => { const s = weeks.slice(Math.max(0,i-3), i+1); w.avg4 = s.reduce((a,x)=>a+x.km,0)/s.length; });
+
+  // years
+  const years = {};
+  runs.forEach(r => { const y = r.date.getFullYear(); (years[y] ||= {km:0,n:0,sec:0}); years[y].km += r.km; years[y].n++; years[y].sec += r.sec; });
+
+  // months
+  const months = new Map();
+  runs.forEach(r => {
+    const k = `${r.date.getFullYear()}-${pad(r.date.getMonth()+1)}`;
+    if (!months.has(k)) months.set(k, {key:k, date:new Date(r.date.getFullYear(), r.date.getMonth(), 15), paces:[], effs:[], km:0, zone:[0,0,0]});
+    const m = months.get(k); m.km += r.km;
+    if (okPace(r)) m.paces.push(r.pace);
+    if (r.deep?.ef) m.effs.push(r.deep.ef);
+    else if (r.hrAvg && okPace(r) && r.km >= 3) m.effs.push((r.km*1000/r.sec*60)/r.hrAvg);
+    zoneSec(r).forEach((s,i) => m.zone[i] += s/60);
+  });
+  const monthArr = [...months.values()].sort((a,b)=>a.date-b.date);
+
+  // season
+  const season = Array(12).fill(0), seasonYears = Array(12).fill(0);
+  const firstY = runs[0].date.getFullYear(), lastY = ref.getFullYear();
+  runs.forEach(r => season[r.date.getMonth()] += r.km);
+  for (let y = firstY; y <= lastY; y++) for (let m = 0; m < 12; m++){
+    const d = new Date(y, m, 15); if (d >= new Date(runs[0].date.getFullYear(), runs[0].date.getMonth(), 1) && d <= refEnd) seasonYears[m]++;
+  }
+  const seasonAvg = season.map((k,i) => seasonYears[i] ? k/seasonYears[i] : 0);
+
+  // vdot
+  runs.forEach(r => r.vdot = runVdot(r));
+  const vruns = runs.filter(r => r.vdot);
+  const quarters = new Map();
+  vruns.forEach(r => { const k = `${r.date.getFullYear()} K${Math.floor(r.date.getMonth()/3)+1}`; const q = quarters.get(k); if (!q || r.vdot > q.vdot) quarters.set(k, {k, vdot:r.vdot, run:r}); });
+  const recentV = vruns.filter(r => refEnd - r.date < 120*DAY).sort((a,b)=>b.vdot-a.vdot);
+  const curVdot = recentV.length ? recentV[0].vdot : null;
+
+  // load: ACWR on km
+  const acute = kmIn(7), chronic = kmIn(28)/4;
+  const acwr = chronic > 0 ? acute/chronic : null;
+
+  // intensity last 8 weeks
+  const z8 = [0,0,0]; inLast(56).forEach(r => zoneSec(r).forEach((s,i) => z8[i] += s));
+  const zTot = z8.reduce((a,b)=>a+b,0);
+
+  // efficiency trend
+  const effOf = list => median(list.filter(r => r.deep?.ef || (r.hrAvg && okPace(r) && r.km >= 3)).map(r => r.deep?.ef || (r.km*1000/r.sec*60)/r.hrAvg));
+  const effNow = effOf(inLast(56));
+  const effPrev = effOf(runs.filter(r => r.date < refEnd - 56*DAY && r.date >= refEnd - 238*DAY));
+  const effYearAgo = effOf(runs.filter(r => r.date < refEnd - 309*DAY && r.date >= refEnd - 365*DAY));
+
+  // gaps & consistency
+  const last12 = inLast(84);
+  let maxGap = 0; for (let i = 1; i < last12.length; i++) maxGap = Math.max(maxGap, (last12[i].date - last12[i-1].date)/DAY);
+  let streak = 0; { const days = new Set(runs.map(r => +dayStart(r.date))); for (let x = new Date(ref); days.has(+x); x = new Date(x.getFullYear(), x.getMonth(), x.getDate()-1)) streak++; }
+
+  const full = weeks.slice(0, -1); // leave out the last (possibly incomplete) week as 'last week'
+  const lastW = full[full.length-1], prev4 = full.slice(-5,-1);
+  const prev4avg = prev4.length ? prev4.reduce((a,w)=>a+w.km,0)/prev4.length : null;
+  const longest4 = Math.max(0, ...inLast(28).map(r=>r.km));
+
+  return {runs, ref, refEnd, weeks, years, monthArr, seasonAvg, quarters:[...quarters.values()], curVdot, bestRecent: recentV[0],
+    acute, chronic, acwr, z8, zTot, effNow, effPrev, effYearAgo, last12, maxGap, streak, lastW, prev4avg, longest4,
+    km4w: kmIn(28), km12w: kmIn(84), ...deepAnalyse(runs, ref, refEnd, monthArr, inLast)};
+}
+
+function deepAnalyse(runs, ref, refEnd, monthArr, inLast){
+  const deepN = runs.filter(r => r.deep).length;
+  // fitness / fatigue from TRIMP of ALL activities (all sports load the body)
+  const daily = new Map();
+  ALL.forEach(s => { const k = +dayStart(s.date); daily.set(k, (daily.get(k)||0) + trimp(s)); });
+  const load = []; let ctl = 0, atl = 0;
+  // step by calendar day (not 24 h) so summer/winter time does not shift the keys
+  for (let x = dayStart(ALL[0].date); x <= ref; x = new Date(x.getFullYear(), x.getMonth(), x.getDate()+1)){
+    const d = +x, t = daily.get(d) || 0; ctl += (t - ctl)/42; atl += (t - atl)/7;
+    load.push({d, ctl, atl, tsb: ctl - atl, t});
+  }
+  const L = load[load.length-1];
+  // per month: decoupling, running index, cadence
+  monthArr.forEach(m => { m.dec = []; m.ri = []; m.cad = []; });
+  const mk = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}`, mm = new Map(monthArr.map(m => [m.key, m]));
+  runs.forEach(r => { const m = mm.get(mk(r.date)); if (!m) return;
+    if (r.deep?.dec != null && r.deep.mov >= 40*60) m.dec.push(r.deep.dec);
+    if (r.ri) m.ri.push(r.ri);
+    if (r.cad && r.cad > 120 && r.cad < 230) m.cad.push(r.cad); });
+  // best efforts: all time, last 365 days, per quarter
+  const DS = [1000, 5000, 10000, 21097];
+  const bestOf = list => Object.fromEntries(DS.map(D => [D, list.filter(r => r.deep?.best?.[D]).reduce((a,r) => !a || r.deep.best[D] < a.t ? {t:r.deep.best[D], r} : a, null)]));
+  const pr = bestOf(runs), pr365 = bestOf(runs.filter(r => refEnd - r.date < 365*DAY));
+  const q = new Map();
+  runs.forEach(r => { if (!r.deep?.best) return; const k = `${r.date.getFullYear()} K${Math.floor(r.date.getMonth()/3)+1}`;
+    const o = q.get(k) || {k, date: new Date(r.date.getFullYear(), Math.floor(r.date.getMonth()/3)*3+1, 15)}; q.set(k, o);
+    for (const D of DS){ const t = r.deep.best[D]; if (t && (!o[D] || t < o[D])) o[D] = t; } });
+  const bestQ = [...q.values()].sort((a,b) => a.date - b.date);
+  const newPr = DS.filter(D => pr[D] && refEnd - pr[D].r.date < 28*DAY);
+  // decoupling recent (runs >= 60 min, 12 weeks)
+  const decRecent = median(inLast(84).filter(r => r.deep?.dec != null && r.deep.mov >= 60*60).map(r => r.deep.dec));
+  const decN = inLast(84).filter(r => r.deep?.dec != null && r.deep.mov >= 60*60).length;
+  const riNow = median(inLast(56).map(r => r.ri).filter(Boolean));
+  const riYear = median(runs.filter(r => r.ri && r.date < refEnd - 309*DAY && r.date >= refEnd - 365*DAY).map(r => r.ri));
+  const cadNow = median(inLast(56).map(r => r.cad).filter(c => c > 120 && c < 230));
+  return {deepN, load, L, pr, pr365, bestQ, newPr, decRecent, decN, riNow, riYear, cadNow};
+}
+
+/* ---------- render ---------- */
+function renderKpis(A){
+  const tot = A.runs.reduce((a,r)=>a+r.km,0), sec = A.runs.reduce((a,r)=>a+r.sec,0);
+  const yrs = Object.keys(A.years);
+  const items = [
+    [fmtNum(tot), 'km total'],
+    [fmtNum(A.runs.length), `runs since ${A.runs[0].date.getFullYear()}`],
+    [fmtNum(sec/3600), 'hours run'],
+    [fmtNum(A.km12w/12,1), 'km/week (12 wk)'],
+    [fmtNum(A.last12.length/12,1), 'runs/week (12 wk)'],
+    [A.curVdot ? fmtNum(A.curVdot,1) : '–', 'VDOT (120 days)'],
+  ];
+  $('#kpis').innerHTML = items.map(([b,s]) => `<div class="kpi"><b>${b}</b><small>${s}</small></div>`).join('');
+}
+
+function renderAdvice(A){
+  const out = []; const add = (lvl, t, x) => out.push({lvl, t, x});
+  const daysSince = Math.round((dayStart(new Date()) - A.ref)/DAY);
+  $('#adviceRef').textContent = `Based on your data up to ${fmtDate(A.ref)}${daysSince > 14 ? ` (${daysSince} days ago – sync again for current advice)` : ''}. Rules of thumb, not medical advice.`;
+
+  if (A.acwr != null){
+    const t = `Last 7 days ${fmtNum(A.acute,1)} km vs. an average of ${fmtNum(A.chronic,1)} km/week over 4 weeks (ratio ${fmtNum(A.acwr,2)}).`;
+    if (A.acwr > 1.5) add('bad','Load rising too fast', t + ' Above 1.5 the injury risk clearly increases. Keep next week at or below your 4-week average.');
+    else if (A.acwr > 1.3) add('warn','Solid build-up', t + ' Fine for a short period, but plan an easier week within 1–2 weeks.');
+    else if (A.acwr < 0.7 && A.chronic > 5) add('info','Easy week', t + ' Good as a recovery or taper week; if it lasts longer, build up gradually again (max ~10% per week).');
+    else add('good','Load in balance', t + ' You are in the safe zone (0.8–1.3).');
+  }
+  if (A.lastW && A.prev4avg > 5){
+    const ch = A.lastW.km/A.prev4avg - 1;
+    if (ch > 0.25) add('warn','Big jump in weekly volume', `Last week ${fmtNum(A.lastW.km,1)} km, ${fmtNum(ch*100)}% above the average of the 4 weeks before. Keep increases around 10%.`);
+  }
+  if (A.km4w > 0 && A.longest4 / (A.km4w/4) > 0.4 && A.longest4 > 12)
+    add('warn','Long run relatively heavy', `Your longest run (${fmtNum(A.longest4,1)} km) is more than 40% of your average weekly volume. More short easy km during the week makes the long run safer.`);
+  if (A.zTot > 3*3600){
+    const easy = A.z8[0]/A.zTot, mid = A.z8[1]/A.zTot;
+    if (easy < 0.65) add('warn','Few truly easy sessions', `Only ${fmtNum(easy*100)}% of your running time (8 wk) was easy (below ${P.aet} bpm), ${fmtNum(mid*100)}% moderate. Most endurance runners improve best with ~75–80% easy and a few targeted hard sessions.`);
+    else if (easy >= 0.75) add('good','Good intensity distribution', `${fmtNum(easy*100)}% of your running time (8 wk) was easy – nicely in line with the 80/20 principle.`);
+    else add('info','Intensity', `${fmtNum(easy*100)}% easy, ${fmtNum(mid*100)}% moderate, ${fmtNum(A.z8[2]/A.zTot*100)}% hard (8 wk). A bit more easy running is fine.`);
+  }
+  if (A.effNow && A.effPrev){
+    const d = A.effNow/A.effPrev - 1;
+    const ya = A.effYearAgo ? ` (a year ago: ${fmtNum(A.effYearAgo,2)})` : '';
+    if (d > 0.03) add('good','Aerobic fitness rising', `You run ${fmtNum(d*100,1)}% more metres per heartbeat than in the 6 months before${ya}. Your base is growing.`);
+    else if (d < -0.04) add('warn','Efficiency dropping', `${fmtNum(-d*100,1)}% fewer metres per heartbeat than the 6 months before${ya}. Could be heat, fatigue, illness or less volume – watch recovery and sleep.`);
+    else add('info','Aerobic fitness stable', `Metres per heartbeat: ${fmtNum(A.effNow,2)} now vs ${fmtNum(A.effPrev,2)} before${ya}.`);
+  }
+  if (A.maxGap > 10) add('info','Break', `In the last 12 weeks there was a gap of ${Math.round(A.maxGap)} days. After a break: first 1–2 weeks at ~70% of your previous volume.`);
+  if (A.streak >= 10) add('warn','No rest day', `You have run ${A.streak} days in a row. Plan at least one rest day per week.`);
+  const runsPw = A.last12.length/12;
+  if (runsPw < 2.5 && A.runs.length > 50) add('info','Frequency', `On average ${fmtNum(runsPw,1)} runs per week. An extra short easy run (30–40 min) is often the cheapest way to get fitter.`);
+  const s = A.seasonAvg, lowM = s.indexOf(Math.min(...s)), highM = s.indexOf(Math.max(...s));
+  if (Object.keys(A.years).length >= 3) add('info','Your seasonal pattern', `Historically you run most in ${MONTHS[highM]} (${fmtNum(s[highM])} km) and least in ${MONTHS[lowM]} (${fmtNum(s[lowM])} km). Plan target races where your build-up is naturally good.`);
+
+  // --- from the 1 s data ---
+  if (A.L && A.L.ctl > 5){
+    const r = A.L.tsb / A.L.ctl, t = `Fitness ${fmtNum(A.L.ctl)}, fatigue ${fmtNum(A.L.atl)}, form ${fmtNum(A.L.tsb)}.`;
+    if (r < -0.4) add('bad','A lot of fatigue built up', t + ' Your fatigue is well above your fitness. Plan a few easy days before training hard again.');
+    else if (r < -0.2) add('warn','You are building up', t + ' A productive training stimulus, but do not keep this up for more than 2–3 weeks without an easier week.');
+    else if (r > 0.25) add('info','Rested', t + ' A good moment for a race or test; if it stays like this for long, your fitness slowly drops.');
+    else add('good','Load and recovery in balance', t);
+  }
+  if (A.decRecent != null && A.decN >= 2){
+    const t = `Median ${fmtNum(A.decRecent,1)}% over ${A.decN} runs of an hour or longer (12 wk).`;
+    if (A.decRecent <= 5) add('good','Strong aerobic base', t + ' Your heart rate barely rises in the second half at the same pace.');
+    else if (A.decRecent > 8) add('warn','Heart rate drifts up on long runs', t + ' Above ~5% points to an aerobic base that can still grow (or heat/too little drinking). More easy long runs below your aerobic threshold help.');
+    else add('info','Aerobic decoupling', t + ' Below 5% is the goal for long easy runs.');
+  }
+  for (const D of A.newPr || []){
+    const b = A.pr[D], n = {1000:'1 km',5000:'5 km',10000:'10 km',21097:'half marathon'}[D];
+    add('good', `New record: ${n}`, `${fmtTime(b.t)} (${fmtPace(b.t/(D/1000))} /km) on ${fmtDate(b.r.date)}, somewhere within a run.`);
+  }
+  if (A.riNow && A.riYear){
+    const d = A.riNow - A.riYear;
+    add(d >= 1 ? 'good' : d <= -2 ? 'warn' : 'info', 'Polar running index', `Now ${fmtNum(A.riNow)} (median 8 wk), a year ago ${fmtNum(A.riYear)}.`);
+  }
+  if (A.cadNow && A.cadNow < 160) add('info','Cadence', `Median ${fmtNum(A.cadNow)} steps/min. Slightly shorter, quicker steps (+5%) often reduce the load on knees and hips.`);
+
+  // shoes past their reminder distance: repeated after every run until the shoes are retired or the reminder is raised
+  const sst = shoeStats();
+  GEAR.filter(g => !g.retired && +g.alertKm > 0).forEach(g => {
+    const km = sst.get(g.id).km;
+    if (km >= g.alertKm) add('warn', `Shoes: ${escH(shoeName(g))} at ${fmtNum(km)} km`, `Past your reminder of ${fmtNum(g.alertKm)} km. Worn cushioning raises the load on your legs; consider a new pair, then mark these as retired (Settings › Shoes), or raise the reminder.`);
+  });
+
+  const order = {bad:0, warn:1, good:2, info:3};
+  $('#advice').innerHTML = out.sort((a,b)=>order[a.lvl]-order[b.lvl]).map((o,i) => `<details class="adv ${o.lvl}"${i === 0 ? ' open' : ''}><summary>${o.t}</summary><div>${o.x}</div></details>`).join('') || '<p>Too little recent data for advice.</p>';
+}
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function mkChart(id, cfg){
+  charts[id]?.destroy();
+  const ink = css('--muted'), line = css('--line');
+  Chart.defaults.color = ink; Chart.defaults.borderColor = line;
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  cfg.options = Object.assign({responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false}, plugins:{legend:{display:false}}}, cfg.options||{});
+  charts[id] = new Chart(document.getElementById(id), cfg);
+}
+const ymd = d => d.toLocaleDateString('en-GB',{month:'short', year:'2-digit'});
+
+function renderCharts(A){
+  const c1 = css('--accent'), c2 = css('--accent2'), c3 = css('--accent3'), cw = css('--warn');
+  const range = +$('#weekRange').value;
+  const W = range ? A.weeks.slice(-range) : A.weeks;
+  mkChart('cWeek', {type:'bar', data:{labels: W.map(w => w.start.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})),
+    datasets:[{label:'km', data:W.map(w=>+w.km.toFixed(1)), backgroundColor:c1+'aa', borderRadius:3},
+              {label:'4-wk avg', type:'line', data:W.map(w=>+w.avg4.toFixed(1)), borderColor:c2, pointRadius:0, borderWidth:2, tension:.3}]},
+    options:{plugins:{legend:{display:true}}, scales:{x:{ticks:{maxTicksLimit:12, autoSkip:true}}}}});
+
+  const ys = Object.keys(A.years);
+  mkChart('cYear', {type:'bar', data:{labels:ys, datasets:[
+    {label:'km', data:ys.map(y=>Math.round(A.years[y].km)), backgroundColor:c1+'cc', borderRadius:4, yAxisID:'y'},
+    {label:'runs', type:'line', data:ys.map(y=>A.years[y].n), borderColor:c2, backgroundColor:c2, yAxisID:'y1'}]},
+    options:{plugins:{legend:{display:true}}, scales:{y1:{position:'right', grid:{display:false}}}}});
+
+  mkChart('cSeason', {type:'bar', data:{labels:MONTHS.map(m=>m.slice(0,3)), datasets:[{label:'avg km', data:A.seasonAvg.map(v=>Math.round(v)), backgroundColor:c3+'cc', borderRadius:4}]}});
+
+  const pr = A.runs.filter(okPace);
+  mkChart('cPace', {type:'scatter', data:{datasets:[
+    {label:'run', data:pr.map(r=>({x:+r.date, y:r.pace})), backgroundColor:c1+'40', pointRadius:2},
+    {label:'monthly median', type:'line', data:A.monthArr.filter(m=>m.paces.length).map(m=>({x:+m.date, y:median(m.paces)})), borderColor:c2, pointRadius:0, borderWidth:2, tension:.3}]},
+    options:{interaction:{mode:'nearest', intersect:false}, scales:{x:{type:'linear', ticks:{callback:v=>ymd(new Date(v)), maxTicksLimit:8}},
+      y:{reverse:true, ticks:{callback:v=>fmtPace(v)}}},
+      plugins:{tooltip:{callbacks:{label:c=>`${new Date(c.raw.x).toLocaleDateString('en-GB')}: ${fmtPace(c.raw.y)} /km`}}}}});
+
+  const em = A.monthArr.filter(m=>m.effs.length >= 2);
+  mkChart('cEff', {type:'line', data:{datasets:[{label:'m/beat', data:em.map(m=>({x:+m.date, y:+median(m.effs).toFixed(3)})), borderColor:c3, backgroundColor:c3, pointRadius:2, tension:.3}]},
+    options:{scales:{x:{type:'linear', ticks:{callback:v=>ymd(new Date(v)), maxTicksLimit:8}}},
+      plugins:{tooltip:{callbacks:{title:c=>ymd(new Date(c[0].raw.x)), label:c=>`${fmtNum(c.raw.y,2)} m per heartbeat`}}}}});
+
+  mkChart('cVdot', {type:'line', data:{labels:A.quarters.map(q=>q.k), datasets:[{label:'VDOT', data:A.quarters.map(q=>+q.vdot.toFixed(1)), borderColor:c1, backgroundColor:c1, tension:.3, pointRadius:3}]},
+    options:{plugins:{tooltip:{callbacks:{afterLabel:c=>{const r=A.quarters[c.dataIndex].run; return `${fmtNum(r.km,2)} km in ${fmtTime(r.sec)} (${fmtDate(r.date)})`;}}}}}});
+
+  const lm = A.monthArr.filter(m => A.refEnd - m.date < 365*DAY);
+  mkChart('cInt', {type:'bar', data:{labels:lm.map(m=>ymd(m.date)), datasets:[
+    {label:`easy <${P.aet}`, data:lm.map(m=>Math.round(m.zone[0])), backgroundColor:c3},
+    {label:`moderate ${P.aet}–${P.ant}`, data:lm.map(m=>Math.round(m.zone[1])), backgroundColor:cw},
+    {label:`hard >${P.ant}`, data:lm.map(m=>Math.round(m.zone[2])), backgroundColor:c1}]},
+    options:{plugins:{legend:{display:true}, tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw} min`}}}, scales:{x:{stacked:true}, y:{stacked:true, title:{display:true, text:'minutes'}}}}});
+}
+
+function renderPred(A){
+  if (!A.curVdot){ $('#pred').innerHTML = '<p class="hint">No runs ≥ 3 km in the last 120 days.</p>'; $('#predHint').textContent=''; return; }
+  const V = A.curVdot, b = A.bestRecent;
+  $('#predHint').textContent = `VDOT ${fmtNum(V,1)}, based on your ${fmtNum(b.km,2)} km run on ${fmtDate(b.date)}. If you have not raced or done a tempo test recently, this is an underestimate.`;
+  const races = [['5 km',5000],['10 km',10000],['Half marathon',21097.5],['Marathon',42195]];
+  const paces = [['Easy (E)',0.62,0.70],['Marathon (M)',0.80],['Threshold (T)',0.88],['Interval (I)',0.975]];
+  const p = f => fmtPace(60000/velAtVO2(V*f));
+  $('#pred').innerHTML = `<table><tr><th>Distance</th><th>Predicted time</th><th>Pace</th></tr>${
+    races.map(([n,m]) => { const t = predictTime(V,m); return `<tr><td>${n}</td><td>${fmtTime(t)}</td><td>${fmtPace(t/(m/1000))} /km</td></tr>`; }).join('')}</table>
+    <table style="margin-top:12px"><tr><th>Training pace</th><th>min/km</th></tr>${
+    paces.map(([n,a,c]) => `<tr><td>${n}</td><td>${c ? p(c)+' – '+p(a) : p(a)}</td></tr>`).join('')}</table>`;
+}
+
+function renderRecords(A){
+  const r = A.runs, best = (list, f) => list.reduce((a,x) => !a || f(x) > f(a) ? x : a, null);
+  const longest = best(r, x => x.km);
+  const fast = d => best(r.filter(x => x.km >= d && okPace(x)), x => -x.pace);
+  const bw = best(A.weeks, w => w.km);
+  const by = Object.entries(A.years).sort((a,b)=>b[1].km-a[1].km)[0];
+  const rows = [
+    ['Longest run', longest && `${fmtNum(longest.km,1)} km – ${fmtDate(longest.date)}`],
+    ...[[5,'≥ 5 km'],[10,'≥ 10 km'],[21,'≥ 21 km']].map(([d,l]) => { const x = fast(d); return [`Fastest avg pace ${l}`, x && `${fmtPace(x.pace)} /km (${fmtNum(x.km,1)} km, ${fmtDate(x.date)})`]; }),
+    ['Biggest week', bw && `${fmtNum(bw.km,1)} km – week of ${fmtDate(bw.start)}`],
+    ['Best year', by && `${by[0]}: ${fmtNum(by[1].km)} km in ${by[1].n} runs`],
+    ['Highest VDOT ever', A.quarters.length && (q => `${fmtNum(q.vdot,1)} (${q.k})`)(best(A.quarters, q => q.vdot))],
+  ];
+  $('#records').innerHTML = `<table>${rows.map(([a,b]) => `<tr><td>${a}</td><td>${b || '–'}</td></tr>`).join('')}</table>`;
+}
+
+function renderTable(){
+  const ys = [...new Set(RUNS.map(r => r.date.getFullYear()))].sort((a,b)=>b-a);
+  const sel = $('#yearSel'), cur = sel.value;
+  sel.innerHTML = '<option value="">Last 100</option>' + ys.map(y => `<option ${String(y)===cur?'selected':''}>${y}</option>`).join('');
+  const list = (sel.value ? RUNS.filter(r => r.date.getFullYear() == sel.value) : RUNS.slice(-100)).slice().reverse();
+  TABLE = list;
+  $('#runsTbl').innerHTML = `<tr><th>Date</th><th>Sport</th><th>Km</th><th>Time</th><th>Pace</th><th>Avg HR</th><th>Max HR</th><th>Ascent</th><th>Cadence</th><th>Decoupling</th><th>Shoes</th></tr>` +
+    list.map((r,i) => `<tr data-i="${i}" class="${r.deep ? 'deep' : ''}"><td>${fmtDate(r.date)}</td><td>${r.sport.toLowerCase().replace(/_/g,' ')}</td><td>${fmtNum(r.km,2)}</td><td>${fmtTime(r.sec)}</td><td>${fmtPace(r.pace)}</td><td>${r.hrAvg??'–'}</td><td>${r.hrMax??'–'}</td><td>${r.ascent!=null?Math.round(r.ascent)+' m':'–'}</td><td>${r.cad ? Math.round(r.cad) : '–'}</td><td>${r.deep?.dec != null ? fmtNum(r.deep.dec,1)+'%' : '–'}</td><td>${(g => g ? escH(shoeName(g)) : '–')(shoeOf(r))}</td></tr>`).join('');
+}
+let TABLE = [];
+
+/* ---------- deeper analysis ---------- */
+const xDate = {type:'linear', ticks:{callback:v=>ymd(new Date(v)), maxTicksLimit:8}};
+function renderDeep(A){
+  const c1 = css('--accent'), c2 = css('--accent2'), c3 = css('--accent3'), cw = css('--warn');
+  $('#deepHint').textContent = `– ${A.deepN} of ${A.runs.length} runs have per-second data (heart rate, pace, distance).`;
+  const rng = +$('#loadRange').value, LD = rng ? A.load.slice(-rng) : A.load;
+  const step = Math.max(1, Math.floor(LD.length/400)), LS = LD.filter((_,i) => i % step === 0 || i === LD.length-1);
+  mkChart('cLoad', {type:'line', data:{datasets:[
+    {label:'Fitness', data:LS.map(x=>({x:x.d, y:+x.ctl.toFixed(1)})), borderColor:c2, backgroundColor:c2, pointRadius:0, borderWidth:2, tension:.2},
+    {label:'Fatigue', data:LS.map(x=>({x:x.d, y:+x.atl.toFixed(1)})), borderColor:c1, backgroundColor:c1, pointRadius:0, borderWidth:1.5, tension:.2},
+    {label:'Form', data:LS.map(x=>({x:x.d, y:+x.tsb.toFixed(1)})), borderColor:c3, backgroundColor:c3+'33', fill:'origin', pointRadius:0, borderWidth:1, tension:.2}]},
+    options:{plugins:{legend:{display:true}, tooltip:{callbacks:{title:c=>new Date(c[0].raw.x).toLocaleDateString('en-GB')}}}, scales:{x:{...xDate, ticks:{...xDate.ticks, callback:v=>new Date(v).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'2-digit'})}}}}});
+
+  const bq = A.bestQ, lineQ = (D, col, lbl) => ({label:lbl, data:bq.filter(q=>q[D]).map(q=>({x:+q.date, y:q[D]/(D/1000)})), borderColor:col, backgroundColor:col, tension:.3, pointRadius:3, spanGaps:true});
+  mkChart('cBest', {type:'line', data:{datasets:[lineQ(1000,c1,'1 km'), lineQ(5000,c2,'5 km'), lineQ(10000,c3,'10 km')]},
+    options:{plugins:{legend:{display:true}, tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmtPace(c.raw.y)} /km`}}}, scales:{x:xDate, y:{reverse:true, ticks:{callback:v=>fmtPace(v)}}}}});
+
+  const dr = A.runs.filter(r => r.deep?.dec != null && r.deep.mov >= 40*60 && Math.abs(r.deep.dec) < 40);
+  mkChart('cDec', {type:'scatter', data:{datasets:[
+    {label:'run', data:dr.map(r=>({x:+r.date, y:r.deep.dec})), backgroundColor:c1+'55', pointRadius:2.5},
+    {label:'monthly median', type:'line', data:A.monthArr.filter(m=>m.dec?.length).map(m=>({x:+m.date, y:+median(m.dec).toFixed(1)})), borderColor:c2, pointRadius:0, borderWidth:2, tension:.3}]},
+    options:{interaction:{mode:'nearest', intersect:false}, scales:{x:xDate, y:{title:{display:true, text:'% drop 2nd half'}}},
+      plugins:{tooltip:{callbacks:{label:c=>`${new Date(c.raw.x).toLocaleDateString('en-GB')}: ${fmtNum(c.raw.y,1)}%`}}}}});
+
+  const mline = (key, col, lbl) => ({label:lbl, data:A.monthArr.filter(m=>m[key]?.length).map(m=>({x:+m.date, y:median(m[key])})), borderColor:col, backgroundColor:col, pointRadius:2, tension:.3});
+  mkChart('cRi', {type:'line', data:{datasets:[mline('ri', c3, 'running index')]}, options:{scales:{x:xDate}}});
+  mkChart('cCad', {type:'line', data:{datasets:[mline('cad', cw, 'steps/min')]}, options:{scales:{x:xDate}}});
+
+  const names = {1000:'1 km', 5000:'5 km', 10000:'10 km', 21097:'Half marathon'};
+  const cell = b => b ? `${fmtTime(b.t)} <span class="hint">(${fmtPace(b.t/(+b.D/1000))} /km, ${fmtDate(b.r.date)})</span>` : '–';
+  $('#prs').innerHTML = `<table><tr><th>Distance</th><th>All time</th><th>Last 12 months</th></tr>${
+    Object.keys(names).map(D => `<tr><td>${names[D]}</td><td>${cell(A.pr[D] && {...A.pr[D], D})}</td><td>${cell(A.pr365[D] && {...A.pr365[D], D})}</td></tr>`).join('')}</table>`;
+}
+
+
+/* ---------- shoes ---------- */
+let GEAR = [], ASSIGN = {};   // GEAR: [{id, brand, model, name, from, sports[], alertKm, startKm, retired, retiredOn}]; ASSIGN: {sessionKey: gearId | ''}
+const SHOE_SPORTS = ['RUNNING','TRAIL_RUNNING','TREADMILL_RUNNING','JOGGING','WALKING','HIKING','NORDIC_WALKING'];
+const escH = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const shoeName = g => g.name || `${g.brand} ${g.model}`.trim();
+const ymdStr = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+// shoes of a run: the choice made for that run, else the default shoes for its sport that were in use on that day
+function shoeOf(r){
+  const k = sessionKey(r);
+  if (k in ASSIGN) return GEAR.find(g => g.id === ASSIGN[k]) || null;
+  const day = ymdStr(r.date);
+  const c = GEAR.filter(g => (g.sports || []).includes(r.sport) && (!g.from || day >= g.from) && (!g.retiredOn || day <= g.retiredOn));
+  return c.sort((a, b) => (b.from || '').localeCompare(a.from || ''))[0] || null;   // the newest pair wins, like a new default
+}
+function shoeStats(){
+  const m = new Map(GEAR.map(g => [g.id, {km: +g.startKm || 0, n: 0, last: null}]));
+  ALL.forEach(r => { const g = shoeOf(r); if (!g) return; const o = m.get(g.id); o.km += r.km; o.n++; if (!o.last || r.date > o.last) o.last = r.date; });
+  return m;
+}
+function renderShoes(){
+  const st = shoeStats();
+  const row = g => {
+    const s = st.get(g.id), a = +g.alertKm || 0, pct = a ? Math.min(100, s.km / a * 100) : 0, over = a && s.km >= a;
+    const meta = [g.name ? escH(`${g.brand} ${g.model}`) : '', `${s.n} run${s.n === 1 ? '' : 's'}`, s.last ? 'last ' + fmtDate(s.last) : '', g.from ? 'since ' + fmtDate(new Date(g.from + 'T12:00')) : '', g.retired ? 'retired' : ''].filter(Boolean).join(' · ');
+    return `<div class="shoe${g.retired ? ' retired' : ''}"><div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div><b>${escH(shoeName(g))}</b><div class="hint" style="margin:0">${meta}</div></div>
+      <div class="row"><b style="font-size:18px">${fmtNum(s.km)} km</b><button class="small" data-edit="${g.id}">Edit</button></div></div>
+      ${a && !g.retired ? `<div class="bar"><i style="width:${pct}%;background:var(${over ? '--bad' : pct > 85 ? '--warn' : '--accent3'})"></i></div>
+      <div class="hint" style="margin:3px 0 0">${over ? `Past the ${fmtNum(a)} km reminder` : `${fmtNum(a - s.km)} km to the ${fmtNum(a)} km reminder`}</div>` : ''}</div>`;
+  };
+  const active = GEAR.filter(g => !g.retired), retired = GEAR.filter(g => g.retired);
+  $('#shoeList').innerHTML = (active.map(row).join('') || '<p class="hint" style="margin:0">No shoes yet. Add a pair to see how far it has run.</p>') +
+    (retired.length ? `<details style="margin-top:8px"><summary>Retired shoes (${retired.length})</summary>${retired.map(row).join('')}</details>` : '');
+  $('#shoeList').querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openShoe(b.dataset.edit));
+}
+function renderRunShoe(r){
+  $('#rdShoeRow').classList.remove('hidden');
+  $('#rdShoe').classList.toggle('hidden', !GEAR.length);
+  $('#rdNoShoes').classList.toggle('hidden', !!GEAR.length);
+  if (!GEAR.length) return;
+  const k = sessionKey(r), explicit = k in ASSIGN, auto = (() => { const v = ASSIGN[k]; delete ASSIGN[k]; const g = shoeOf(r); if (explicit) ASSIGN[k] = v; return g; })();
+  const cur = shoeOf(r);
+  const opts = GEAR.filter(g => !g.retired || g === cur);
+  $('#rdShoe').innerHTML = `<option value="__auto">Automatic (${auto ? escH(shoeName(auto)) : 'none'})</option><option value="">None</option>` +
+    opts.map(g => `<option value="${g.id}">${escH(shoeName(g))}${g.retired ? ' (retired)' : ''}</option>`).join('');
+  $('#rdShoe').value = explicit ? ASSIGN[k] : '__auto';
+}
+$('#rdShoe').onchange = e => {
+  if (!CUR_RUN) return;
+  const k = sessionKey(CUR_RUN);
+  if (e.target.value === '__auto') delete ASSIGN[k]; else ASSIGN[k] = e.target.value;
+  shoesChanged();
+};
+function shoesChanged(){ saveStore(); renderShoes(); if (ALL.length) refresh(); }
+
+let EDIT_SHOE = null;
+function openShoe(id){
+  const g = GEAR.find(x => x.id === id) || {brand: '', model: '', name: '', from: ymdStr(new Date()), alertKm: 400, startKm: 0,
+    sports: ['RUNNING', 'TRAIL_RUNNING', 'TREADMILL_RUNNING'], retired: false};
+  EDIT_SHOE = id || null;
+  $('#shoeDlgTitle').textContent = id ? 'Edit shoes' : 'Add shoes';
+  $('#shBrand').value = g.brand; $('#shModel').value = g.model; $('#shName').value = g.name || '';
+  $('#shFrom').value = g.from || ''; $('#shAlert').value = g.alertKm ?? 0; $('#shStart').value = g.startKm || 0; $('#shRetired').checked = !!g.retired;
+  const sports = shoeSportOptions();
+  $('#shSports').innerHTML = sports.map(s => `<label><input type="checkbox" value="${s}" ${(g.sports || []).includes(s) ? 'checked' : ''}> ${s.replace(/_/g, ' ').toLowerCase()}</label>`).join('');
+  $('#shDelete').classList.toggle('hidden', !id);
+  $('#shoeDlg').showModal();
+}
+$('#btnAddShoe').onclick = () => openShoe(null);
+function saveShoe(id, v){
+  const g = (id && GEAR.find(x => x.id === id)) || {id: 'g' + Date.now().toString(36)};
+  const wasRetired = !!g.retired;
+  Object.assign(g, {brand: String(v.brand || '').trim(), model: String(v.model || '').trim(), name: String(v.name || '').trim(),
+    from: v.from || ymdStr(new Date()), alertKm: Math.max(0, +v.alertKm || 0), startKm: Math.max(0, +v.startKm || 0),
+    sports: v.sports || [], retired: !!v.retired});
+  if (g.retired && !wasRetired) g.retiredOn = ymdStr(new Date());   // stops counting new runs from today
+  if (!g.retired) delete g.retiredOn;
+  if (!GEAR.includes(g)) GEAR.push(g);
+  shoesChanged();
+  return g.id;
+}
+function deleteShoe(id){
+  GEAR = GEAR.filter(x => x.id !== id);
+  for (const k of Object.keys(ASSIGN)) if (ASSIGN[k] === id) delete ASSIGN[k];
+  shoesChanged();
+}
+$('#shoeForm').onsubmit = e => {
+  if (e.submitter && e.submitter.value !== 'save') return;
+  saveShoe(EDIT_SHOE, {brand: $('#shBrand').value, model: $('#shModel').value, name: $('#shName').value, from: $('#shFrom').value,
+    alertKm: $('#shAlert').value, startKm: $('#shStart').value, retired: $('#shRetired').checked,
+    sports: [...$('#shSports').querySelectorAll('input:checked')].map(c => c.value)});
+};
+// for the iPhone app's native Settings › Shoes
+const shoeSportOptions = () => [...new Set([...SHOE_SPORTS, ...ALL.map(s => s.sport).filter(s => /RUN|WALK|HIK|JOG/.test(s))])];
+window.appShoes = () => { const st = shoeStats(); return {sports: shoeSportOptions(), shoes: GEAR.map(g => ({...g, display: shoeName(g),
+  km: Math.round(st.get(g.id).km * 10) / 10, runs: st.get(g.id).n, last: st.get(g.id).last ? fmtDate(st.get(g.id).last) : null}))}; };
+window.appSaveShoe = (id, v) => { saveShoe(id, v); return window.appShoes(); };
+window.appDeleteShoe = id => { deleteShoe(id); return window.appShoes(); };
+$('#shDelete').onclick = () => {
+  const g = GEAR.find(x => x.id === EDIT_SHOE);
+  if (!g || !confirm(`Delete ${shoeName(g)}? Runs assigned to it get no shoes.`)) return;
+  $('#shoeDlg').close();
+  deleteShoe(g.id);
+};
+
+let CUR_RUN = null;
+function showRun(r){
+  const d = r.deep, card = $('#runDetail');
+  CUR_RUN = r;
+  $('#rdStrava').classList.toggle('hidden', !(APP && r.wid));
+  const i = RUNS.indexOf(r);
+  $('#rdPrev').disabled = i <= 0; $('#rdNext').disabled = i < 0 || i >= RUNS.length - 1;
+  $('#rdTitle').textContent = `${r.sport.toLowerCase().replace(/_/g,' ')} – ${r.date.toLocaleString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'})}`;
+  const k = [[fmtNum(r.km,2)+' km', fmtTime(r.sec)], r.vmax > 0 ? [`${fmtPace(r.pace)} / ${fmtPace(3600 / r.vmax)}`, 'pace avg / max (min/km)'] : [fmtPace(r.pace)+' /km', 'avg pace'], [r.hrAvg ? `${r.hrAvg} / ${r.hrMax}` : '–', 'heart rate avg / max'],
+    [fmtNum(trimp(r)), 'TRIMP (load)']];
+  if (d?.ef) k.push([fmtNum(d.ef,2), 'm per heartbeat (moving)']);
+  if (d?.dec != null) k.push([fmtNum(d.dec,1)+'%', 'aerobic decoupling']);
+  if (r.cad) k.push([Math.round(r.cad), 'cadence (steps/min)']);
+  if (isRunSport(r.sport)){   // Polar running index of this run vs. the 8 weeks before it
+    const prev = median(ALL.filter(x => x.ri && x.date < r.date && r.date - x.date < 56*DAY).map(x => x.ri));
+    k.push([r.ri ?? '–', `Polar running index${prev ? ` (8-wk median ${fmtNum(prev)})` : ''}${r.ri ? '' : ' – not computed by the watch for this run'}`]);
+  }
+  $('#rdKpis').innerHTML = k.map(([b,s]) => `<div class="kpi"><b>${b}</b><small>${s}</small></div>`).join('');
+  renderRunShoe(r);
+  const c1 = css('--accent'), c2 = css('--accent2'), c3 = css('--muted');
+  const S = d?.s;
+  $('#cRun').parentElement.classList.toggle('hidden', !(S && (S.hr || S.v)));
+  if (S && (S.hr || S.v)){
+    const t = i => i*S.iv/60, ds = [];
+    if (S.hr) ds.push({label:'heart rate', data:S.hr.map((y,i)=>({x:t(i), y})), borderColor:c1, pointRadius:0, borderWidth:1.5, yAxisID:'y'});
+    if (S.v) ds.push({label:'pace', data:S.v.map((y,i)=>({x:t(i), y: y > 30 ? 36000/y : null})), borderColor:c2, pointRadius:0, borderWidth:1.5, yAxisID:'y1', spanGaps:false});
+    if (S.alt) ds.push({label:'altitude', data:S.alt.map((y,i)=>({x:t(i), y})), borderColor:c3+'88', backgroundColor:c3+'22', fill:true, pointRadius:0, borderWidth:1, yAxisID:'y2'});
+    mkChart('cRun', {type:'line', data:{datasets:ds}, options:{plugins:{legend:{display:true}, tooltip:{callbacks:{
+        title:c=>`${Math.floor(c[0].raw.x)} min`, label:c=>c.dataset.label==='pace' ? `pace ${fmtPace(c.raw.y)} /km` : `${c.dataset.label} ${c.raw.y}`}}},
+      scales:{x:{type:'linear', title:{display:true, text:'minutes'}}, y:{position:'left', title:{display:true, text:'bpm'}},
+        y1:{position:'right', reverse:true, min:150, max:540, grid:{display:false}, ticks:{callback:v=>fmtPace(v)}}, y2:{display:false}}}});
+  } else { charts.cRun?.destroy(); delete charts.cRun; }
+  $('#rdSplits').innerHTML = d?.splits?.length ? `<tr><th>Km</th><th>Time</th><th>Avg HR</th><th>Cadence</th></tr>` +
+    d.splits.map((s,i) => `<tr><td>${i+1}</td><td>${fmtPace(s[0])}</td><td>${s[1]??'–'}</td><td>${s[2]??'–'}</td></tr>`).join('') : '<tr><td class="hint">No per-second data for this run.</td></tr>';
+  const z = zoneSec(r);
+  mkChart('cRunZones', {type:'bar', data:{labels:[`easy <${P.aet}`, `moderate ${P.aet}–${P.ant}`, `hard >${P.ant}`],
+    datasets:[{data:z.map(s=>Math.round(s/60)), backgroundColor:[css('--accent3'), css('--warn'), css('--accent')], borderRadius:4}]},
+    options:{indexAxis:'y', plugins:{tooltip:{callbacks:{label:c=>`${c.raw} min`}}}}});
+}
+
+function exportCsv(){
+  const head = ['date','sport','km','duration_sec','pace_sec_per_km','hr_avg','hr_max','ascent_m','kcal','cadence','name'];
+  const esc = v => v == null ? '' : /[",;\n]/.test(String(v)) ? `"${String(v).replace(/"/g,'""')}"` : v;
+  const rows = ALL.map(r => [r.date.toISOString(), r.sport, r.km.toFixed(3), Math.round(r.sec), r.km > 0 ? Math.round(r.sec/r.km) : '', r.hrAvg, r.hrMax, r.ascent, r.kcal, r.cad, r.name].map(esc).join(','));
+  saveFile('polar-trainings.csv', head.join(',') + '\n' + rows.join('\n'), 'text/csv');
+}
+function exportBackup(){
+  if (!ALL.length || isDemo){ status('Nothing to back up yet.'); return; }
+  saveFile(`libreflow-backup-${new Date().toISOString().slice(0,10)}.json`, pack(true), 'application/json');
+  status(`Backup of ${ALL.length} trainings made. Load this file on another device with "Choose file".`);
+}
+
+/* ---------- wiring ---------- */
+function status(t){ $('#status').textContent = t; if (APP) APP.postMessage({cmd: 'status', text: t}); }
+// reset the input afterwards, otherwise choosing the same file/folder again fires no change event
+$('#fZip').onchange = async e => { await loadFiles(e.target.files); e.target.value = ''; };
+$('#fDir').onchange = async e => { await loadFiles(e.target.files); e.target.value = ''; };
+$('#btnDemo').onclick = () => {
+  if (ALL.length && !isDemo && !confirm('Show demo data? Your own data stays stored and returns after a reload or a new import.')) return;
+  isDemo = true; status('Demo data: 8 years of fictional runs (not saved).'); start(demoData());
+  showView('run');
+};
+$('#btnClear').onclick = clearStore;
+$('#btnBackup').onclick = exportBackup;
+$('#rdStrava').onclick = () => APP && CUR_RUN?.wid && APP.postMessage({cmd: 'strava', id: CUR_RUN.wid});
+function showView(v){
+  if (APP && document.body.dataset.view !== v) APP.postMessage({cmd: 'view', view: v});   // keep the app's tab bar in step
+  document.body.dataset.view = v;
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showView(b.dataset.view));
+if (APP){
+  document.body.classList.add('in-app');
+  $('#appEmptyText').innerHTML = 'Tap <b>Sync</b> to read your watch, or import a backup made on your Mac under <b>Settings › Import</b>.';
+  $('#fDir').parentElement.classList.add('hidden');
+  if (!ALL.length) $('#appEmpty').classList.remove('hidden');
+}
+
+/* ---------- API for the iPhone app's native Settings tab ---------- */
+window.appSettings = () => {
+  const counts = {}; ALL.forEach(s => counts[s.sport] = (counts[s.sport]||0) + 1);
+  const p = prof();
+  return {count: ALL.length, isDemo, hrMax: hrMax || p.hrMax, hrMaxFromProfile: !!PROFILE.hrMax && !userHrMax, hrRest: p.hrRest, aet: p.aet, ant: p.ant,
+    sports: Object.keys(counts).sort((a,b) => counts[b]-counts[a]).map(s => ({id: s, name: s.replace(/_/g,' ').toLowerCase(), count: counts[s], on: selected.has(s)}))};
+};
+window.appSetSettings = o => {
+  if (o.hrMax){ hrMax = userHrMax = +o.hrMax; }
+  for (const k of ['hrRest','aet','ant']) if (o[k] && +o[k] !== prof()[k]){ PROFILE[k] = +o[k]; PROFILE.userSet = [...new Set([...(PROFILE.userSet||[]), k])]; }
+  if (Array.isArray(o.sports)){ selected = new Set(o.sports); $('#sports').querySelectorAll('input').forEach(cb => cb.checked = selected.has(cb.value)); }
+  if (!isDemo) saveStore();
+  if (ALL.length) refresh();
+  return window.appSettings();
+};
+window.appCommand = cmd => {
+  if (cmd === 'backup') exportBackup();
+  else if (cmd === 'csv') exportCsv();
+  else if (cmd === 'demo'){ isDemo = true; status('Demo data: 8 years of fictional runs (not saved).'); start(demoData()); }
+  else if (cmd === 'clear') clearStore(true);
+  else if (cmd === 'reload'){ const st = loadStore(); if (st && st.sessions.length){ isDemo = false; userHrMax = st.hrMax; PROFILE = st.profile; GEAR = st.gear; ASSIGN = st.assign; start(st.sessions); status(`${ALL.length} stored trainings loaded.`); } }
+  return window.appSettings();
+};
+window.appImportZip = async b64 => {
+  const bin = atob(b64), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return loadFiles([new File([u], 'import.zip')]);
+};
+$('#btnCsv').onclick = exportCsv;
+$('#hrMax').onchange = e => { hrMax = +e.target.value || null; if (!isDemo){ userHrMax = hrMax; saveStore(); } refresh(); };
+$('#weekRange').onchange = () => refresh();
+for (const [id, key] of [['hrRest','hrRest'], ['aet','aet'], ['ant','ant']])
+  $('#' + id).onchange = e => { const v = +e.target.value; if (v){ PROFILE[key] = v; PROFILE.userSet = [...new Set([...(PROFILE.userSet||[]), key])]; saveStore(); refresh(); } };
+$('#loadRange').onchange = () => refresh();
+$('#yearSel').onchange = renderTable;
+$('#runsTbl').onclick = e => { const tr = e.target.closest('tr[data-i]'); if (tr){ showRun(TABLE[+tr.dataset.i]); showView('run'); } };
+$('#rdPrev').onclick = () => { const i = RUNS.indexOf(CUR_RUN); if (i > 0) showRun(RUNS[i-1]); };
+$('#rdNext').onclick = () => { const i = RUNS.indexOf(CUR_RUN); if (i >= 0 && i < RUNS.length-1) showRun(RUNS[i+1]); };
+const drop = $('#drop');
+['dragover','dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => loadFiles(e.dataTransfer.files));
+
+if (!storageWorks()) $('#noStore').classList.remove('hidden');
+
+// libreflow.html#demo[&view=run|trends|runs|settings]: open with demo data (nothing is saved), e.g. for screenshots
+const HASH = new URLSearchParams(location.hash.slice(1));
+const stored = HASH.has('demo') ? null : loadStore();
+function demoDeep(r){
+  let seed = Math.round(r.date / 1000) % 2147483647; const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
+  const n = Math.round(r.sec / 30), vAvg = 3600 / r.pace, hist = Array(HBN).fill(0), S = {iv: 30, hr: [], v: [], alt: [], cad: []};
+  let dist = 0, nextKm = 1000, kmStart = 0, kmHr = [], splits = [];
+  for (let i = 0; i < n; i++){
+    const f = i / n, v = vAvg * (1 + 0.06*Math.sin(i/7) + 0.04*(rnd() - .5)) * (i < 4 ? 0.85 : 1);
+    const hr = Math.round(r.hrAvg - 10 + Math.min(10, i/2) + f*8 + 3*(rnd() - .5));
+    S.hr.push(hr); S.v.push(Math.round(v*10)); S.alt.push(Math.round(12 + 6*Math.sin(i/15))); S.cad.push(Math.round((r.cad || 170) + 3*(rnd() - .5)));
+    hist[Math.min(HBN-1, Math.max(0, Math.floor((hr - HB0)/HBW)))] += 30;
+    dist += v / 3.6 * 30; kmHr.push(hr);
+    if (dist >= nextKm){ splits.push([Math.round((i + 1 - kmStart) * 30 * 1000 / (dist - (nextKm - 1000))) , Math.round(median(kmHr)), S.cad[i]]); nextKm += 1000; kmStart = i + 1; kmHr = []; }
+  }
+  r.deep = {hist, mov: Math.round(r.sec), ef: +((vAvg*1000/60) / r.hrAvg).toFixed(4), dec: +(2 + 5*rnd()).toFixed(1), splits, s: S,
+    best: Object.fromEntries([1000, 5000, 10000].filter(D => r.km*1000 >= D).map(D => [D, Math.round(r.pace * D/1000 * (D === 1000 ? 0.9 : 0.96))]))};
+  r.vmax = +(vAvg * 1.35).toFixed(2); r.ri = Math.round(46 + 10*rnd());
+}
+function openDemo(view){
+  isDemo = true;
+  const ago = d => ymdStr(new Date(Date.now() - d*DAY));
+  GEAR = [{id: 'demo1', brand: 'Trail', model: 'Runner 3', name: 'Old faithful', from: ago(720), sports: ['RUNNING'], alertKm: 800, startKm: 0, retired: true, retiredOn: ago(300)},
+          {id: 'demo2', brand: 'Road', model: 'Cruiser 9', name: '', from: ago(300), sports: ['RUNNING', 'TRAIL_RUNNING'], alertKm: 800, startKm: 0, retired: false},
+          {id: 'demo3', brand: 'Speed', model: 'Racer 2', name: 'Race day', from: ago(60), sports: [], alertKm: 400, startKm: 0, retired: false}];
+  start(demoData());
+  RUNS.slice(-40).forEach(demoDeep);   // fictional per-second data for the recent runs, so the run view has charts
+  RUNS.filter(r => r.pace < 300).slice(-8).forEach(r => ASSIGN[sessionKey(r)] = 'demo3');   // fast runs in the racing shoes
+  refresh();
+  status('Demo data: 8 years of fictional runs (not saved).');
+  showView(view || 'run');
+}
+if (HASH.has('demo')) openDemo(HASH.get('view'));
+else if (stored && stored.sessions.length){
+  userHrMax = stored.hrMax; PROFILE = stored.profile; GEAR = stored.gear; ASSIGN = stored.assign;
+  start(stored.sessions);
+  status(`${ALL.length} stored trainings loaded. New imports are added.`);
+} else {
+  $('#appEmpty').classList.remove('hidden');
+  if (!APP) showView('settings');   // nothing yet: start at Import
+}
+renderShoes();
+</script>
+</body>
+</html>

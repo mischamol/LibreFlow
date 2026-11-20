@@ -1,0 +1,28 @@
+# Personal data – never commit
+horloge_data/
+horloge_dump/
+trainingen_json/
+polar-user-data-export*/
+*.zip
+*.log
+*.tcx
+*.gpx
+training-session*.json
+*-backup-*.json
+sync-log.txt
+CLAUDE.local.md
+
+# Personal signing settings (copy ios/Local.xcconfig.example)
+ios/Local.xcconfig
+
+# Generated
+ios/*.xcodeproj/
+ios/LibreFlow/Web/index.html
+ios/build/
+DerivedData/
+xcuserdata/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store

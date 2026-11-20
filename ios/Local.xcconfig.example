@@ -1,0 +1,5 @@
+// Copy to Local.xcconfig (ignored by git) and fill in your own values.
+// DEVELOPMENT_TEAM: your Team ID (Xcode › Settings › Accounts › your Apple ID › Personal Team).
+// PRODUCT_BUNDLE_IDENTIFIER: any unique id, e.g. app.libreflow.<something only you use>.
+DEVELOPMENT_TEAM = ABCDE12345
+PRODUCT_BUNDLE_IDENTIFIER = app.libreflow.yourname
