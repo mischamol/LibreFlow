@@ -21,7 +21,10 @@ struct LibreFlowApp: App {
             .environmentObject(model)
             .environmentObject(model.sync)
             .environmentObject(StravaClient.shared)
-            .sheet(item: $model.stravaTarget) { t in StravaExportView(trainingId: t.id) }
+            // a sheet attached here sits outside the .environmentObject scope above: pass the objects explicitly
+            .sheet(item: $model.stravaTarget) { t in
+                StravaExportView(trainingId: t.id).environmentObject(model).environmentObject(StravaClient.shared)
+            }
             .sheet(item: $model.shareURL) { s in ShareSheet(items: [s.url]) }
         }
     }

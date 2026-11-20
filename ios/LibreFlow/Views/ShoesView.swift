@@ -17,7 +17,7 @@ struct ShoesSection: View {
             Text("Runs count for the default shoes of their sport from the date the shoes are in use. Change the shoes of a single run under Latest Run.")
         }
         .task { await model.refreshShoes() }
-        .sheet(item: $editing) { s in ShoeEditView(shoe: s) }
+        .sheet(item: $editing) { s in ShoeEditView(shoe: s).environmentObject(model) }
     }
 
     private func row(_ s: AppModel.Shoe) -> some View {
