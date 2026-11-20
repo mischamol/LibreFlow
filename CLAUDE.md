@@ -28,16 +28,23 @@ are in `CLAUDE.local.md`, which is not in git.
   directly in the app and in the Mac page).
 - Polar running index: computed by the watch, stored in `00/BASE.BPB` field 9 › 1 (field 9 › 2 a duration); absent
   when the watch did not compute one. Matches Flow's `runningIndex`; read by both decoders.
+- Sport names: the watch defines them in /SYS/SPORT/<id>/SPORT.BPB (field 1 › 1 id, field 2 › 1 parent, field 3 =
+  translations {1 lang, 2 name}; no English entry). Verified ids: 1 running, 2 cycling, 3 walking, 5 mountain biking,
+  7 downhill skiing, 11 hiking, 15 strength training, 16 other outdoor, 23 swimming, 27 trail running, 64 body & mind,
+  82 multisport, 83 other indoor, 126 core, 127 mobility static. Other ids (e.g. 38) are shown as "unknown".
 - Max speed (Flow's "max pace"): `00/STATS.BPB` field 2 {1 avg, 2 max} km/h; Flow `statistics SPEED max`.
 - Known caveats: altitude looks uncalibrated; BASE field 11 (~20 m) may be ascent or descent, not verified.
 - Strava: file upload (TCX, manual at strava.com/upload/select) is free; the API (direct upload) needs a paid
   subscription. Both supported; the user has no subscription. In the app every run has Export… (GPX file via `GPXWriter`, TCX without GPS); with Settings › Strava on (default off) it becomes To Strava… (API upload).
 
 ## Files
-- `libreflow.html` – single source of the analysis page (English). Views: Latest Run (newest run,
+- `libreflow.html` – single source of the analysis page (English). Views: Latest Activity (newest run,
   older/newer, shoes choice, pace avg / max, running index vs. 8-week median), Analysis (advice at the top as compact
-  expandable items with the top one open, KPIs, charts, deep analysis, predictions, records), All Runs (list),
-  Settings (Mac only: import, backup, HR settings, sports, shoes). Shoes: brand/model/nickname, "in use since",
+  expandable items with the top one open, KPIs, charts, deep analysis, predictions, records), All Activities (list),
+  Settings (Mac only: import, backup, HR settings, sports, shoes).
+  Latest Activity / All Activities show every sport (speed km/h and no shoes for non-shoe sports; sport filter);
+  Analysis uses the selected sports. Edit… per activity: sport, shoes, delete (stored as `edits`/`deleted`, which
+  survive re-imports). Page alert()/confirm() are shown natively in the app (WKUIDelegate). Shoes: brand/model/nickname, "in use since",
   default sports, reminder km (default 400), optional distance before tracking, retire/delete; runs auto-assigned to
   the newest default pair in use that day; stored as `gear`/`assign` in the store and backups. No tap/double-tap zoom
   (touch-action, 16px inputs on touch); pinch zoom kept. Computes compact per-second metrics at import (HR histogram,
@@ -47,7 +54,7 @@ are in `CLAUDE.local.md`, which is not in git.
   `appSettings/appSetSettings/appCommand/appImportZip` and `appShoes/appSaveShoe/appDeleteShoe`.
 - `ios/` – iPhone app "LibreFlow" (SwiftUI, xcodegen `project.yml`; the `.xcodeproj` is generated and not in git).
   Native BLE PSFTP (`BLE/`), decoder/storage (`Training/`, identical to Python), Strava upload with the user's own
-  Strava API app + TCX (`Strava/`). Tabs Latest Run / Analysis / All Runs share one WKWebView (`WebSlot`), plus a
+  Strava API app + TCX (`Strava/`). Tabs Latest Activity / Analysis / All Activities share one WKWebView (`WebSlot`), plus a
   native Settings tab. `Web/index.html` is generated from `libreflow.html` by `ios/tools/make_app_page.py`
   (pre-build step). Signing: `ios/Local.xcconfig` (from `Local.xcconfig.example`). Build with
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` if xcode-select points to the Command Line Tools;

@@ -57,17 +57,17 @@ Every run synced from the watch has an **Export…** button in the app. Two ways
 ## Screenshots
 Fictional demo data. Try it yourself: open `libreflow.html#demo` (add `&view=trends`, `runs` or `settings`).
 
-| Latest Run | Analysis | All Runs | Settings |
+| Latest Activity | Analysis | All Activities | Settings |
 |---|---|---|---|
-| ![Latest Run](docs/screenshots/latest-run.png) | ![Analysis](docs/screenshots/analysis.png) | ![All Runs](docs/screenshots/all-runs.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Latest Activity](docs/screenshots/latest-run.png) | ![Analysis](docs/screenshots/analysis.png) | ![All Activities](docs/screenshots/all-runs.png) | ![Settings](docs/screenshots/settings.png) |
 
 On a wide screen:
 
 ![Analysis on a wide screen](docs/screenshots/desktop-analysis.png)
 
 ## Files
-- `libreflow.html` – analysis app for the browser: tabs **Latest Run** (the newest run, older/newer),
-  **Analysis** (advice, charts, predictions, records), **All Runs** (list of all runs) and **Settings** (import, backup, heart
+- `libreflow.html` – analysis app for the browser: tabs **Latest Activity** (the newest run, older/newer),
+  **Analysis** (advice, charts, predictions, records), **All Activities** (list of all activities, filter by sport) and **Settings** (import, backup, heart
   rate and thresholds, sports, shoes). Reads the Polar Flow export (ZIP or folder), `training-session*.json` files and
   backups. Data is kept in the browser's local storage only; open the file in Safari or Chrome.
 - `polar_ble.py` – Bluetooth tool (Polar's PSFTP protocol). Reads files; with `--sync` it only sends Polar's

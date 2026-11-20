@@ -8,12 +8,12 @@ struct LibreFlowApp: App {
     var body: some Scene {
         WindowGroup {
             TabView(selection: $model.tab) {
-                AnalysisView(tag: 0, title: "Latest Run")
-                    .tabItem { Label("Latest Run", systemImage: "figure.run") }.tag(0)
+                AnalysisView(tag: 0, title: "Latest Activity")
+                    .tabItem { Label("Latest Activity", systemImage: "figure.run") }.tag(0)
                 AnalysisView(tag: 1, title: "Analysis")
                     .tabItem { Label("Analysis", systemImage: "chart.xyaxis.line") }.tag(1)
-                AnalysisView(tag: 2, title: "All Runs")
-                    .tabItem { Label("All Runs", systemImage: "list.bullet") }.tag(2)
+                AnalysisView(tag: 2, title: "All Activities")
+                    .tabItem { Label("All Activities", systemImage: "list.bullet") }.tag(2)
                 SettingsView()
                     .tabItem { Label("Settings", systemImage: "gearshape") }.tag(3)
             }

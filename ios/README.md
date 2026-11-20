@@ -5,9 +5,9 @@ choose to – sends a training to Strava, with or without heart rate.
 No Polar Flow, no account, no cloud, no external AI. Everything stays on your iPhone.
 
 ## What is in it
-- **Latest Run / Analysis / All Runs**: the same analysis as `libreflow.html` (generated from it at every build by
-  `tools/make_app_page.py`; inside the app the page cannot load anything from the internet). Tabs **Latest Run** (your newest run, older/newer), **Analysis** (advice and
-  charts) and **All Runs**. At the top: **Sync** (reads the watch: read-only plus
+- **Latest Activity / Analysis / All Activities**: the same analysis as `libreflow.html` (generated from it at every build by
+  `tools/make_app_page.py`; inside the app the page cannot load anything from the internet). Tabs **Latest Activity** (your newest run, older/newer), **Analysis** (advice and
+  charts) and **All Activities**. At the top: **Sync** (reads the watch: read-only plus
   Polar's sync notifications, new days only) and a button for the **sync log**.
   Each run has an *Export…* button (save as file); with *Settings › Strava* on it becomes *To Strava…*.
 - **Export**: preview with map, *Include heart rate* switch (**off** by default), then *Export…* (GPX; TCX for runs without GPS; upload it

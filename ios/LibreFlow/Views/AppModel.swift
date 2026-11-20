@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Shared app state: the analysis web view (kept alive across tabs), the watch sync, and sheets.
 @MainActor
-final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavigationDelegate {
+final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     @Published var stravaTarget: StravaTarget?
     @Published var shareURL: ShareItem?
     @Published var tab = 0
@@ -79,6 +79,7 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         cfg.userContentController = ucc
         let wv = WKWebView(frame: .zero, configuration: cfg)
         wv.navigationDelegate = self
+        wv.uiDelegate = self   // show the page's alert() / confirm() as iOS alerts
         wv.isInspectable = true
         // privacy: the page may not load anything from the internet
         WKContentRuleListStore.default().compileContentRuleList(
@@ -134,6 +135,26 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
             if let id = m["id"] as? String { stravaTarget = StravaTarget(id: id, toStrava: m["toStrava"] as? Bool ?? false) }
         default: break
         }
+    }
+
+    // MARK: alert() and confirm() from the page
+
+    private func presentAlert(_ message: String, cancellable: Bool, done: @escaping (Bool) -> Void) {
+        let a = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        if cancellable { a.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in done(false) }) }
+        a.addAction(UIAlertAction(title: "OK", style: cancellable && message.hasPrefix("Delete") ? .destructive : .default) { _ in done(true) })
+        var top = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first?.rootViewController
+        while let p = top?.presentedViewController { top = p }
+        guard let top else { done(false); return }
+        top.present(a, animated: true)
+    }
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping () -> Void) {
+        presentAlert(message, cancellable: false) { _ in completionHandler() }
+    }
+    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping (Bool) -> Void) {
+        presentAlert(message, cancellable: true, done: completionHandler)
     }
 
     // MARK: calls into the page

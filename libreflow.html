@@ -105,7 +105,7 @@ ol{padding-left:20px}
   <h1>Libre<span>Flow</span></h1>
   <p class="sub">Your own Polar history, analysed locally. Nothing is uploaded: everything stays on this device.</p>
 </header>
-<nav id="tabs"><button data-view="run" class="on">Latest Run</button><button data-view="trends">Analysis</button><button data-view="runs">All Runs</button><button data-view="settings">Settings</button></nav>
+<nav id="tabs"><button data-view="run" class="on">Latest Activity</button><button data-view="trends">Analysis</button><button data-view="runs">All Activities</button><button data-view="settings">Settings</button></nav>
 <main>
 
 <div class="adv warn hidden" id="noStore"><b>This view cannot store anything</b>
@@ -156,7 +156,7 @@ ol{padding-left:20px}
   </section>
   <section class="card" id="shoesCard">
     <div class="row" style="justify-content:space-between">
-      <div><h2>Shoes</h2><p class="hint" style="margin:0">Distance per pair. Runs count for the default shoes of their sport from the date the shoes are in use; change it per run under Latest Run.</p></div>
+      <div><h2>Shoes</h2><p class="hint" style="margin:0">Distance per pair. Runs count for the default shoes of their sport from the date the shoes are in use; change it per activity with Edit.</p></div>
       <button id="btnAddShoe">+ Add shoes</button>
     </div>
     <div id="shoeList" style="margin-top:8px"></div>
@@ -170,10 +170,9 @@ ol{padding-left:20px}
 <div id="vRun">
   <section class="card" id="runDetail">
     <div class="row" style="justify-content:space-between"><h2 id="rdTitle"></h2>
-      <div class="row"><button id="rdPrev">‹ Older</button><button id="rdNext">Newer ›</button><button id="rdStrava" class="primary hidden">Export…</button></div></div>
+      <div class="row"><button id="rdPrev">‹ Older</button><button id="rdNext">Newer ›</button><button id="rdEdit">Edit…</button><button id="rdStrava" class="primary hidden">Export…</button></div></div>
     <div class="kpis" id="rdKpis" style="margin:10px 0"></div>
-    <div class="row hidden" id="rdShoeRow" style="margin:0 0 10px"><label>Shoes <select id="rdShoe"></select></label>
-      <span class="hint" id="rdNoShoes" style="margin:0">No shoes yet – add them under Settings › Shoes.</span></div>
+    <p class="hint hidden" id="rdShoeRow" style="margin:0 0 10px"></p>
     <div class="chart" style="height:320px"><canvas id="cRun"></canvas></div>
     <div class="grid" style="margin-top:14px">
       <div><h2 style="font-size:15px">Kilometres</h2><div class="tablewrap"><table id="rdSplits"></table></div></div>
@@ -185,8 +184,8 @@ ol{padding-left:20px}
 <div id="vRuns">
   <section class="card">
     <div class="row" style="justify-content:space-between">
-      <div><h2>Runs</h2><p class="hint" style="margin:0">Tap a run to open it.</p></div>
-      <select id="yearSel"></select>
+      <div><h2>Activities</h2><p class="hint" style="margin:0">Tap an activity to open it.</p></div>
+      <div class="row"><select id="sportSel"></select><select id="yearSel"></select></div>
     </div>
     <div class="tablewrap"><table id="runsTbl"></table></div>
   </section>
@@ -241,6 +240,20 @@ ol{padding-left:20px}
 </div>
 
 </div>
+<dialog id="actDlg"><form method="dialog" id="actForm">
+  <h2 style="margin:0">Edit activity</h2>
+  <p class="hint" id="actWhen" style="margin:4px 0 0"></p>
+  <div class="formGrid">
+    <label>Sport <select id="actSport"></select></label>
+    <label id="actShoeWrap">Shoes <select id="actShoe"></select></label>
+  </div>
+  <div class="row" style="margin-top:14px">
+    <button value="save" class="primary">Save</button>
+    <button value="cancel" formnovalidate>Cancel</button>
+    <span style="flex:1"></span>
+    <button type="button" id="actDelete" class="danger">Delete activity</button>
+  </div>
+</form></dialog>
 <dialog id="shoeDlg"><form method="dialog" id="shoeForm">
   <h2 id="shoeDlgTitle" style="margin:0">Add shoes</h2>
   <div class="formGrid">
@@ -292,8 +305,10 @@ const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).
 
 /* ---------- parsing Polar export ---------- */
 // Polar sport ids (Polar Flow export uses {sport:{id:"1"}})
-const SPORT_IDS = {1:'RUNNING', 2:'CYCLING', 3:'WALKING', 4:'JOGGING', 5:'MOUNTAIN_BIKING', 9:'NORDIC_WALKING', 11:'HIKING',
-  15:'STRENGTH_TRAINING', 16:'OTHER_OUTDOOR', 17:'TREADMILL_RUNNING', 27:'TRAIL_RUNNING'};
+// names as defined by the watch itself (/SYS/SPORT/<id>/SPORT.BPB on a Grit X); other ids show as "unknown"
+const SPORT_IDS = {1:'RUNNING', 2:'CYCLING', 3:'WALKING', 5:'MOUNTAIN_BIKING', 7:'DOWNHILL_SKIING', 11:'HIKING',
+  15:'STRENGTH_TRAINING', 16:'OTHER_OUTDOOR', 23:'SWIMMING', 27:'TRAIL_RUNNING', 64:'BODY_AND_MIND', 82:'MULTISPORT',
+  83:'OTHER_INDOOR', 126:'CORE', 127:'MOBILITY_STATIC'};
 const isRunSport = s => /RUN|LOOP|JOG/.test(s);
 function sportName(x){
   if (x == null) return '';
@@ -461,6 +476,7 @@ async function importEntries(entries){
         j.sessions.forEach(s => out.push({...s, date: new Date(s.date)}));
         if (j.profile && !PROFILE.date) PROFILE = j.profile;
         if (Array.isArray(j.gear) && !GEAR.length){ GEAR = j.gear; ASSIGN = {...(j.assign || {}), ...ASSIGN}; }
+        EDITS = {...(j.edits || {}), ...EDITS}; (j.deleted || []).forEach(k => DELETED.add(k));
         continue;
       }
       for (const x of (Array.isArray(j) ? j : [j])){ const s = toSession(x); s ? out.push(s) : fail++; }
@@ -502,7 +518,7 @@ function dedupe(list){
 const FIELDS = ['sport','km','sec','hrAvg','hrMax','ascent','kcal','cad','ri','vmax','load','name','deep','wid'];
 const BACKUP_FORMAT = 'libreflow-backup', OLD_BACKUP_FORMATS = ['run-analysis-backup', 'hardloop-analyse-backup'];
 const APP = window.webkit?.messageHandlers?.libreflow;   // running inside the iPhone app
-const pack = withSeries => JSON.stringify({v: 2, format: BACKUP_FORMAT, hrMax: userHrMax, profile: PROFILE, gear: GEAR, assign: ASSIGN, sessions: ALL.map(s => {
+const pack = withSeries => JSON.stringify({v: 2, format: BACKUP_FORMAT, hrMax: userHrMax, profile: PROFILE, gear: GEAR, assign: ASSIGN, edits: EDITS, deleted: [...DELETED], sessions: ALL.map(s => {
   const o = {date: s.date.getTime()}; for (const f of FIELDS) if (s[f] != null) o[f] = s[f];
   if (o.deep && !withSeries){ o.deep = {...o.deep}; delete o.deep.s; }
   return o; })});
@@ -525,7 +541,7 @@ function loadStore(){
     const j = JSON.parse((APP ? window.__LIBREFLOW_STORE : localStorage.getItem(STORE)) || 'null');
     if (!j || !Array.isArray(j.sessions)) return null;
     return {sessions: j.sessions.map(s => ({...s, date: new Date(s.date)})), hrMax: j.hrMax || null, profile: j.profile || {},
-      gear: Array.isArray(j.gear) ? j.gear : [], assign: j.assign || {}};
+      gear: Array.isArray(j.gear) ? j.gear : [], assign: j.assign || {}, edits: j.edits || {}, deleted: j.deleted || []};
   } catch { return null; }
 }
 try { for (const k of OLD_STORES) if (!localStorage.getItem(STORE) && localStorage.getItem(k)){ localStorage.setItem(STORE, localStorage.getItem(k)); localStorage.removeItem(k); } } catch {}
@@ -534,7 +550,7 @@ function clearStore(skipConfirm){
   if (!skipConfirm && !confirm('Delete all stored trainings from this device? Raw watch files are kept.')) return;
   if (APP) APP.postMessage({cmd: 'store', text: ''});
   try { localStorage.removeItem(STORE); } catch {}
-  ALL = []; RUNS = []; userHrMax = null; isDemo = false; PROFILE = {}; GEAR = []; ASSIGN = {};
+  ALL = []; RUNS = []; ACTS = []; userHrMax = null; isDemo = false; PROFILE = {}; GEAR = []; ASSIGN = {}; EDITS = {}; DELETED = new Set();
   Object.values(charts).forEach(c => c.destroy()); charts = {};
   $('#app').classList.add('hidden');
   $('#appEmpty').classList.remove('hidden');
@@ -568,7 +584,9 @@ function demoData(){
 
 /* ---------- main flow ---------- */
 function start(sessions){
-  ALL = dedupe(sessions).sort((a,b) => a.date - b.date);
+  ALL = dedupe(sessions).filter(s => !DELETED.has(sessionKey(s))).sort((a,b) => a.date - b.date);
+  ALL.forEach(s => { const m = /^SPORT_(\d+)$/.exec(s.sport); if (m && SPORT_IDS[m[1]]) s.sport = SPORT_IDS[m[1]]; });   // ids named later
+  ALL.forEach(s => { const e = EDITS[sessionKey(s)]; if (e?.sport) s.sport = e.sport; });
   // running cadence below 120 is per leg (strides/min): show steps per minute, like Polar Flow
   ALL.forEach(s => { if (s.cad && s.cad < 120 && /RUN|LOOP|JOG/.test(s.sport)) s.cad *= 2; });
   $('#btnClear').classList.toggle('hidden', isDemo || !ALL.length);
@@ -579,7 +597,7 @@ function start(sessions){
   selected = new Set(sportsList.filter(s => /RUN|LOOP|JOG/.test(s)));
   if (!selected.size) selected.add(sportsList[0]);
   $('#sports').innerHTML = '<span class="hint">Include sports: </span>' + sportsList.map(s =>
-    `<label><input type="checkbox" value="${s}" ${selected.has(s)?'checked':''}> ${s.replace(/_/g,' ').toLowerCase()} (${counts[s]})</label>`).join('');
+    `<label><input type="checkbox" value="${s}" ${selected.has(s)?'checked':''}> ${sportLabel(s)} (${counts[s]})</label>`).join('');
   $('#sports').querySelectorAll('input').forEach(cb => cb.onchange = () => { cb.checked ? selected.add(cb.value) : selected.delete(cb.value); refresh(); });
   hrMax = isDemo ? null : userHrMax;
   $('#app').classList.remove('hidden');
@@ -596,8 +614,9 @@ function estimateHrMax(runs){
 }
 
 function refresh(){
-  RUNS = ALL.filter(s => selected.has(s.sport) && s.km > 0.3);
-  RUNS.forEach(r => r.pace = r.sec / r.km);
+  ALL.forEach(s => s.pace = s.km > 0 ? s.sec / s.km : null);
+  ACTS = ALL;                                                   // Latest Activity / All Activities: every sport
+  RUNS = ALL.filter(s => selected.has(s.sport) && s.km > 0.3);   // Analysis: the selected sports
   const est = estimateHrMax(RUNS);
   if (!hrMax) hrMax = PROFILE.hrMax || est || 190;
   P = prof();
@@ -605,11 +624,11 @@ function refresh(){
   $('#hrRest').value = P.hrRest; $('#aet').value = P.aet; $('#ant').value = P.ant;
   $('#hrMaxHint').textContent = PROFILE.hrMax ? `(from your Polar profile${est ? `; highest measured: ${est}` : ''})`
     : est ? `(estimated from your data: ${est}; adjust if you know your real max)` : '(no heart rate data found)';
-  if (!RUNS.length){ $('#kpis').innerHTML = '<p>No runs for this selection.</p>'; return; }
+  renderShoes(); renderTable();
+  if (ACTS.length){ if (!CUR_RUN || !ACTS.includes(CUR_RUN)) showRun(ACTS[ACTS.length-1]); else showRun(CUR_RUN); }   // open on the newest activity
+  if (!RUNS.length){ $('#kpis').innerHTML = '<p>No activities for the selected sports (Settings).</p>'; return; }
   const A = analyse(RUNS);
-  renderKpis(A); renderAdvice(A); renderShoes(); renderCharts(A); renderDeep(A); renderPred(A); renderRecords(A); renderTable();
-  if (!CUR_RUN || !RUNS.includes(CUR_RUN)) showRun(RUNS[RUNS.length-1]);   // open on the newest run
-  else showRun(CUR_RUN);
+  renderKpis(A); renderAdvice(A); renderCharts(A); renderDeep(A); renderPred(A); renderRecords(A);
 }
 
 /* ---------- analysis ---------- */
@@ -935,13 +954,18 @@ function renderRecords(A){
 }
 
 function renderTable(){
-  const ys = [...new Set(RUNS.map(r => r.date.getFullYear()))].sort((a,b)=>b-a);
+  const ss = $('#sportSel'), curSport = ss.value, counts = {};
+  ACTS.forEach(r => counts[r.sport] = (counts[r.sport] || 0) + 1);
+  ss.innerHTML = `<option value="">All sports (${ACTS.length})</option>` + Object.keys(counts).sort((a,b) => counts[b] - counts[a])
+    .map(sp => `<option value="${sp}" ${sp === curSport ? 'selected' : ''}>${sportLabel(sp)} (${counts[sp]})</option>`).join('');
+  const pool = ss.value ? ACTS.filter(r => r.sport === ss.value) : ACTS;
+  const ys = [...new Set(pool.map(r => r.date.getFullYear()))].sort((a,b)=>b-a);
   const sel = $('#yearSel'), cur = sel.value;
   sel.innerHTML = '<option value="">Last 100</option>' + ys.map(y => `<option ${String(y)===cur?'selected':''}>${y}</option>`).join('');
-  const list = (sel.value ? RUNS.filter(r => r.date.getFullYear() == sel.value) : RUNS.slice(-100)).slice().reverse();
+  const list = (sel.value ? pool.filter(r => r.date.getFullYear() == sel.value) : pool.slice(-100)).slice().reverse();
   TABLE = list;
-  $('#runsTbl').innerHTML = `<tr><th>Date</th><th>Sport</th><th>Km</th><th>Time</th><th>Pace</th><th>Avg HR</th><th>Max HR</th><th>Ascent</th><th>Cadence</th><th>Decoupling</th><th>Shoes</th></tr>` +
-    list.map((r,i) => `<tr data-i="${i}" class="${r.deep ? 'deep' : ''}"><td>${fmtDate(r.date)}</td><td>${r.sport.toLowerCase().replace(/_/g,' ')}</td><td>${fmtNum(r.km,2)}</td><td>${fmtTime(r.sec)}</td><td>${fmtPace(r.pace)}</td><td>${r.hrAvg??'–'}</td><td>${r.hrMax??'–'}</td><td>${r.ascent!=null?Math.round(r.ascent)+' m':'–'}</td><td>${r.cad ? Math.round(r.cad) : '–'}</td><td>${r.deep?.dec != null ? fmtNum(r.deep.dec,1)+'%' : '–'}</td><td>${(g => g ? escH(shoeName(g)) : '–')(shoeOf(r))}</td></tr>`).join('');
+  $('#runsTbl').innerHTML = `<tr><th>Date</th><th>Sport</th><th>Km</th><th>Time</th><th>Pace / speed</th><th>Avg HR</th><th>Max HR</th><th>Ascent</th><th>Cadence</th><th>Decoupling</th><th>Shoes</th></tr>` +
+    list.map((r,i) => `<tr data-i="${i}" class="${r.deep ? 'deep' : ''}"><td>${fmtDate(r.date)}</td><td>${sportLabel(r.sport)}</td><td>${fmtNum(r.km,2)}</td><td>${fmtTime(r.sec)}</td><td>${paceOrSpeed(r)}</td><td>${r.hrAvg??'–'}</td><td>${r.hrMax??'–'}</td><td>${r.ascent!=null?Math.round(r.ascent)+' m':'–'}</td><td>${r.cad ? Math.round(r.cad) : '–'}</td><td>${r.deep?.dec != null ? fmtNum(r.deep.dec,1)+'%' : '–'}</td><td>${(g => g ? escH(shoeName(g)) : '')(shoeSport(r.sport) ? shoeOf(r) : null)}</td></tr>`).join('');
 }
 let TABLE = [];
 
@@ -1015,24 +1039,11 @@ function renderShoes(){
     (retired.length ? `<details style="margin-top:8px"><summary>Retired shoes (${retired.length})</summary>${retired.map(row).join('')}</details>` : '');
   $('#shoeList').querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openShoe(b.dataset.edit));
 }
-function renderRunShoe(r){
-  $('#rdShoeRow').classList.remove('hidden');
-  $('#rdShoe').classList.toggle('hidden', !GEAR.length);
-  $('#rdNoShoes').classList.toggle('hidden', !!GEAR.length);
-  if (!GEAR.length) return;
-  const k = sessionKey(r), explicit = k in ASSIGN, auto = (() => { const v = ASSIGN[k]; delete ASSIGN[k]; const g = shoeOf(r); if (explicit) ASSIGN[k] = v; return g; })();
-  const cur = shoeOf(r);
-  const opts = GEAR.filter(g => !g.retired || g === cur);
-  $('#rdShoe').innerHTML = `<option value="__auto">Automatic (${auto ? escH(shoeName(auto)) : 'none'})</option><option value="">None</option>` +
-    opts.map(g => `<option value="${g.id}">${escH(shoeName(g))}${g.retired ? ' (retired)' : ''}</option>`).join('');
-  $('#rdShoe').value = explicit ? ASSIGN[k] : '__auto';
+function renderRunShoe(r){   // shoes are shown, not edited, here (Edit… changes them); hidden for sports without shoes
+  const g = shoeSport(r.sport) ? shoeOf(r) : null;
+  $('#rdShoeRow').classList.toggle('hidden', !shoeSport(r.sport) || !GEAR.length);
+  $('#rdShoeRow').innerHTML = `Shoes: <b>${g ? escH(shoeName(g)) : 'none'}</b>${sessionKey(r) in ASSIGN ? '' : ' (automatic)'}`;
 }
-$('#rdShoe').onchange = e => {
-  if (!CUR_RUN) return;
-  const k = sessionKey(CUR_RUN);
-  if (e.target.value === '__auto') delete ASSIGN[k]; else ASSIGN[k] = e.target.value;
-  shoesChanged();
-};
 function shoesChanged(){ saveStore(); renderShoes(); if (ALL.length) refresh(); }
 
 let EDIT_SHOE = null;
@@ -1085,6 +1096,55 @@ $('#shDelete').onclick = () => {
   deleteShoe(g.id);
 };
 
+
+/* ---------- activities: every sport; edit sport / shoes, delete ---------- */
+let ACTS = [], EDITS = {}, DELETED = new Set();   // EDITS: {sessionKey: {sport}}; DELETED: sessionKeys (kept out of re-imports)
+const usesPace = sport => isRunSport(sport) || /WALK|HIK/.test(sport);
+const shoeSport = sport => /RUN|JOG|WALK|HIK/.test(sport) || GEAR.some(g => (g.sports || []).includes(sport));
+const paceOrSpeed = r => !(r.km > 0) ? '–' : usesPace(r.sport) ? fmtPace(r.pace) + ' /km' : fmtNum(r.km / (r.sec/3600), 1) + ' km/h';
+const sportLabel = s => /^SPORT_\d+$/.test(s) ? 'unknown' : s.replace(/_/g, ' ').toLowerCase();   // ids the watch does not define
+function fillActShoes(r, sport){
+  const show = shoeSport(sport) && GEAR.length;
+  $('#actShoeWrap').classList.toggle('hidden', !show);
+  if (!show) return;
+  const k = sessionKey(r), v = ASSIGN[k], explicit = k in ASSIGN;
+  const keepSport = r.sport; r.sport = sport; if (explicit) delete ASSIGN[k];
+  const auto = shoeOf(r);
+  r.sport = keepSport; if (explicit) ASSIGN[k] = v;
+  const cur = explicit ? GEAR.find(g => g.id === v) : auto;
+  $('#actShoe').innerHTML = `<option value="__auto">Automatic (${auto ? escH(shoeName(auto)) : 'none'})</option><option value="">None</option>` +
+    GEAR.filter(g => !g.retired || g === cur).map(g => `<option value="${g.id}">${escH(shoeName(g))}${g.retired ? ' (retired)' : ''}</option>`).join('');
+  $('#actShoe').value = explicit ? v : '__auto';
+}
+function openActivity(r){
+  const sports = [...new Set([...Object.values(SPORT_IDS), ...ALL.map(s => s.sport), r.sport])].sort();
+  $('#actWhen').textContent = `${sportLabel(r.sport)} · ${r.date.toLocaleString('en-GB', {day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'})} · ${fmtNum(r.km, 2)} km`;
+  $('#actSport').innerHTML = sports.map(s => `<option value="${s}">${sportLabel(s)}</option>`).join('');
+  $('#actSport').value = r.sport;
+  $('#actSport').onchange = () => fillActShoes(r, $('#actSport').value);
+  fillActShoes(r, r.sport);
+  $('#actDlg').showModal();
+}
+$('#actForm').onsubmit = e => {
+  if (!CUR_RUN || (e.submitter && e.submitter.value !== 'save')) return;
+  const r = CUR_RUN, k = sessionKey(r), sport = $('#actSport').value;
+  if (sport !== r.sport){ r.sport = sport; EDITS[k] = {...(EDITS[k] || {}), sport}; }
+  if (shoeSport(sport) && GEAR.length){ const v = $('#actShoe').value; if (v === '__auto') delete ASSIGN[k]; else ASSIGN[k] = v; }
+  else delete ASSIGN[k];
+  saveStore(); refresh();
+};
+$('#actDelete').onclick = () => {
+  const r = CUR_RUN;
+  if (!r || !confirm(`Delete this ${sportLabel(r.sport)} of ${fmtDate(r.date)}? It also stays out of later imports.`)) return;
+  const k = sessionKey(r), i = ACTS.indexOf(r);
+  DELETED.add(k); delete ASSIGN[k]; delete EDITS[k];
+  ALL = ALL.filter(x => x !== r);
+  CUR_RUN = ALL[Math.min(i, ALL.length - 1)] || null;
+  $('#actDlg').close();
+  saveStore();
+  if (ALL.length) refresh(); else { $('#app').classList.add('hidden'); $('#appEmpty').classList.remove('hidden'); }
+};
+
 let CUR_RUN = null;
 // the app's Settings › Strava switch (off by default) turns the Export button into To Strava (direct upload via the API)
 let STRAVA_ON = false;
@@ -1094,14 +1154,15 @@ function showRun(r){
   CUR_RUN = r;
   $('#rdStrava').classList.toggle('hidden', !APP);   // always in the app; Export, or To Strava when that option is on
   $('#rdStrava').textContent = STRAVA_ON ? 'To Strava…' : 'Export…';
-  const i = RUNS.indexOf(r);
-  $('#rdPrev').disabled = i <= 0; $('#rdNext').disabled = i < 0 || i >= RUNS.length - 1;
-  $('#rdTitle').textContent = `${r.sport.toLowerCase().replace(/_/g,' ')} – ${r.date.toLocaleString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'})}`;
-  const k = [[fmtNum(r.km,2)+' km', fmtTime(r.sec)], r.vmax > 0 ? [`${fmtPace(r.pace)} / ${fmtPace(3600 / r.vmax)}`, 'pace avg / max (min/km)'] : [fmtPace(r.pace)+' /km', 'avg pace'], [r.hrAvg ? `${r.hrAvg} / ${r.hrMax}` : '–', 'heart rate avg / max'],
+  const i = ACTS.indexOf(r);
+  $('#rdPrev').disabled = i <= 0; $('#rdNext').disabled = i < 0 || i >= ACTS.length - 1;
+  $('#rdTitle').textContent = `${sportLabel(r.sport)} – ${r.date.toLocaleString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'})}`;
+  const k = [[fmtNum(r.km,2)+' km', fmtTime(r.sec)], usesPace(r.sport) ? (r.vmax > 0 ? [`${fmtPace(r.pace)} / ${fmtPace(3600 / r.vmax)}`, 'pace avg / max (min/km)'] : [fmtPace(r.pace)+' /km', 'avg pace'])
+      : [r.km > 0 ? `${fmtNum(r.km / (r.sec/3600), 1)}${r.vmax > 0 ? ' / ' + fmtNum(r.vmax, 1) : ''}` : '–', r.vmax > 0 ? 'speed avg / max (km/h)' : 'avg speed (km/h)'], [r.hrAvg ? `${r.hrAvg} / ${r.hrMax}` : '–', 'heart rate avg / max'],
     [fmtNum(trimp(r)), 'TRIMP (load)']];
   if (d?.ef) k.push([fmtNum(d.ef,2), 'm per heartbeat (moving)']);
   if (d?.dec != null) k.push([fmtNum(d.dec,1)+'%', 'aerobic decoupling']);
-  if (r.cad) k.push([Math.round(r.cad), 'cadence (steps/min)']);
+  if (r.cad) k.push([Math.round(r.cad), isRunSport(r.sport) ? 'cadence (steps/min)' : 'cadence (rpm)']);
   if (isRunSport(r.sport)){   // Polar running index of this run vs. the 8 weeks before it
     const prev = median(ALL.filter(x => x.ri && x.date < r.date && r.date - x.date < 56*DAY).map(x => x.ri));
     k.push([r.ri ?? '–', `Polar running index${prev ? ` (8-wk median ${fmtNum(prev)})` : ''}${r.ri ? '' : ' – not computed by the watch for this run'}`]);
@@ -1177,7 +1238,7 @@ window.appSettings = () => {
   const counts = {}; ALL.forEach(s => counts[s.sport] = (counts[s.sport]||0) + 1);
   const p = prof();
   return {count: ALL.length, isDemo, hrMax: hrMax || p.hrMax, hrMaxFromProfile: !!PROFILE.hrMax && !userHrMax, hrRest: p.hrRest, aet: p.aet, ant: p.ant,
-    sports: Object.keys(counts).sort((a,b) => counts[b]-counts[a]).map(s => ({id: s, name: s.replace(/_/g,' ').toLowerCase(), count: counts[s], on: selected.has(s)}))};
+    sports: Object.keys(counts).sort((a,b) => counts[b]-counts[a]).map(s => ({id: s, name: sportLabel(s), count: counts[s], on: selected.has(s)}))};
 };
 window.appSetSettings = o => {
   if (o.hrMax){ hrMax = userHrMax = +o.hrMax; }
@@ -1192,7 +1253,7 @@ window.appCommand = cmd => {
   else if (cmd === 'csv') exportCsv();
   else if (cmd === 'demo'){ isDemo = true; status('Demo data: 8 years of fictional runs (not saved).'); start(demoData()); }
   else if (cmd === 'clear') clearStore(true);
-  else if (cmd === 'reload'){ const st = loadStore(); if (st && st.sessions.length){ isDemo = false; userHrMax = st.hrMax; PROFILE = st.profile; GEAR = st.gear; ASSIGN = st.assign; start(st.sessions); status(`${ALL.length} stored trainings loaded.`); } }
+  else if (cmd === 'reload'){ const st = loadStore(); if (st && st.sessions.length){ isDemo = false; userHrMax = st.hrMax; PROFILE = st.profile; EDITS = st.edits; DELETED = new Set(st.deleted); GEAR = st.gear; ASSIGN = st.assign; start(st.sessions); status(`${ALL.length} stored trainings loaded.`); } }
   return window.appSettings();
 };
 window.appImportZip = async b64 => {
@@ -1207,9 +1268,11 @@ for (const [id, key] of [['hrRest','hrRest'], ['aet','aet'], ['ant','ant']])
   $('#' + id).onchange = e => { const v = +e.target.value; if (v){ PROFILE[key] = v; PROFILE.userSet = [...new Set([...(PROFILE.userSet||[]), key])]; saveStore(); refresh(); } };
 $('#loadRange').onchange = () => refresh();
 $('#yearSel').onchange = renderTable;
+$('#sportSel').onchange = renderTable;
 $('#runsTbl').onclick = e => { const tr = e.target.closest('tr[data-i]'); if (tr){ showRun(TABLE[+tr.dataset.i]); showView('run'); } };
-$('#rdPrev').onclick = () => { const i = RUNS.indexOf(CUR_RUN); if (i > 0) showRun(RUNS[i-1]); };
-$('#rdNext').onclick = () => { const i = RUNS.indexOf(CUR_RUN); if (i >= 0 && i < RUNS.length-1) showRun(RUNS[i+1]); };
+$('#rdPrev').onclick = () => { const i = ACTS.indexOf(CUR_RUN); if (i > 0) showRun(ACTS[i-1]); };
+$('#rdNext').onclick = () => { const i = ACTS.indexOf(CUR_RUN); if (i >= 0 && i < ACTS.length-1) showRun(ACTS[i+1]); };
+$('#rdEdit').onclick = () => CUR_RUN && openActivity(CUR_RUN);
 const drop = $('#drop');
 ['dragover','dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
@@ -1251,7 +1314,7 @@ function openDemo(view){
 }
 if (HASH.has('demo')) openDemo(HASH.get('view'));
 else if (stored && stored.sessions.length){
-  userHrMax = stored.hrMax; PROFILE = stored.profile; GEAR = stored.gear; ASSIGN = stored.assign;
+  userHrMax = stored.hrMax; PROFILE = stored.profile; GEAR = stored.gear; ASSIGN = stored.assign; EDITS = stored.edits; DELETED = new Set(stored.deleted);
   start(stored.sessions);
   status(`${ALL.length} stored trainings loaded. New imports are added.`);
 } else {

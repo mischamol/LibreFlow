@@ -623,7 +623,10 @@ def read_file(path):
     return gzip.decompress(data) if data[:2] == b"\x1f\x8b" else data
 
 
-SPORTS = {1: "RUNNING", 2: "CYCLING", 3: "WALKING", 11: "HIKING", 27: "TRAIL_RUNNING"}
+# names as defined by the watch itself (/SYS/SPORT/<id>/SPORT.BPB)
+SPORTS = {1: "RUNNING", 2: "CYCLING", 3: "WALKING", 5: "MOUNTAIN_BIKING", 7: "DOWNHILL_SKIING", 11: "HIKING",
+          15: "STRENGTH_TRAINING", 16: "OTHER_OUTDOOR", 23: "SWIMMING", 27: "TRAIL_RUNNING", 64: "BODY_AND_MIND",
+          82: "MULTISPORT", 83: "OTHER_INDOOR", 126: "CORE", 127: "MOBILITY_STATIC"}
 
 
 def decode_training(d):
