@@ -42,9 +42,11 @@ are in `CLAUDE.local.md`, which is not in git.
 - `libreflow.html` – single source of the analysis page (English). Views: Latest Activity (newest run,
   older/newer, shoes choice, pace avg / max, running index vs. 8-week median), Analysis (advice at the top as compact
   expandable items with the top one open, KPIs, charts, deep analysis, predictions, records), All Activities (list),
-  Settings (Mac only: import, backup, HR settings, sports, shoes).
+  Settings (Mac only: import, backup, HR settings, map, shoes).
   Latest Activity / All Activities show every sport (speed km/h and no shoes for non-shoe sports; sport filter);
-  Analysis uses the selected sports. Edit… per activity: sport, shoes, delete (stored as `edits`/`deleted`, which
+  Analysis has its own selector at the top (All activities, default, or one sport; `ANA_SPORT`, localStorage);
+  pace-based parts (pace, efficiency, VDOT, predictions, best efforts, cadence) only use running sports. No sport
+  toggles in Settings any more. Edit… per activity: sport, shoes, delete (stored as `edits`/`deleted`, which
   survive re-imports). Page alert()/confirm() are shown natively in the app (WKUIDelegate).
   Raw data per activity (full 1 s series + GPS route, `rawOf`) is kept apart from the summary: app files
   Documents/raw/<key>.json, browser IndexedDB `libreflow-raw`; backups are ZIPs (libreflow-backup.json + raw/). Route view:

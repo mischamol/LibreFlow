@@ -54,20 +54,6 @@ struct SettingsView: View {
                     Text("From your Polar profile when the import contains it. Easy = below the aerobic threshold, hard = above the anaerobic threshold. Used for zones, load and advice.")
                 }
 
-                if !s.sports.isEmpty {
-                    Section("Include sports") {
-                        ForEach(s.sports) { sp in
-                            Toggle("\(sp.name.capitalized) (\(sp.count))", isOn: Binding(
-                                get: { sp.on },
-                                set: { on in
-                                    var ids = Set(s.sports.filter(\.on).map(\.id))
-                                    if on { ids.insert(sp.id) } else { ids.remove(sp.id) }
-                                    Task { await model.applySettings(sports: Array(ids)) }
-                                }))
-                        }
-                    }
-                }
-
                 ShoesSection()
 
                 // --- privacy: what exports and uploads contain ---

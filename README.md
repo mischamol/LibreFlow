@@ -70,7 +70,7 @@ On a wide screen:
 ## Files
 - `libreflow.html` – analysis app for the browser: tabs **Latest Activity** (the newest run, older/newer),
   **Analysis** (advice, charts, predictions, records), **All Activities** (list of all activities, filter by sport) and **Settings** (import, backup, heart
-  rate and thresholds, sports, shoes). Reads the Polar Flow export (ZIP or folder), `training-session*.json` files and
+  rate and thresholds, map, shoes). Reads the Polar Flow export (ZIP or folder), `training-session*.json` files and
   backups. Data is kept in the browser's local storage only; open the file in Safari or Chrome.
 - `polar_ble.py` – Bluetooth tool (Polar's PSFTP protocol). Reads files; with `--sync` it only sends Polar's
   sync start/stop notifications. Nothing on the watch is written or deleted.

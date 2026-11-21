@@ -149,7 +149,7 @@ ol{padding-left:20px}
   </details>
 </section>
   <section class="card hidden" id="settingsCard">
-    <h2>Heart rate and sports</h2>
+    <h2>Heart rate and map</h2>
     <div class="row">
       <label>Max heart rate <input type="number" id="hrMax" min="120" max="230" style="width:80px"></label>
       <span class="hint" id="hrMaxHint" style="margin:0"></span>
@@ -205,6 +205,7 @@ ol{padding-left:20px}
   </section>
 </div>
 <div id="vTrends">
+  <div class="row" style="margin:14px 0 0"><label>Analyse <select id="anaSport"></select></label></div>
   <section class="card" id="adviceCard">
     <h2>Advice</h2>
     <p class="hint" id="adviceRef"></p>
@@ -293,6 +294,11 @@ ol{padding-left:20px}
 "use strict";
 const $ = s => document.querySelector(s);
 let ALL = [], RUNS = [], selected = new Set(), charts = {}, hrMax = null;
+// Analysis: '' = all activities, or one sport (remembered per device)
+let ANA_SPORT = (() => { try { return localStorage.getItem('libreflow.anaSport') || ''; } catch { return ''; } })();
+const NOUNS = {RUNNING: ['run', 'runs'], TRAIL_RUNNING: ['run', 'runs'], TREADMILL_RUNNING: ['run', 'runs'], CYCLING: ['ride', 'rides'],
+  MOUNTAIN_BIKING: ['ride', 'rides'], WALKING: ['walk', 'walks'], HIKING: ['hike', 'hikes'], SWIMMING: ['swim', 'swims']};
+const noun = plural => (NOUNS[ANA_SPORT] || ['activity', 'activities'])[plural ? 1 : 0];
 
 /* ---------- helpers ---------- */
 const num = v => { if (v == null || v === '') return null; const n = +v; return isFinite(n) ? n : null; };
@@ -546,7 +552,7 @@ function dedupe(list){
 const FIELDS = ['sport','km','sec','hrAvg','hrMax','ascent','kcal','cad','ri','vmax','load','name','deep','wid'];
 const BACKUP_FORMAT = 'libreflow-backup', OLD_BACKUP_FORMATS = ['run-analysis-backup', 'hardloop-analyse-backup'];
 const APP = window.webkit?.messageHandlers?.libreflow;   // running inside the iPhone app
-const pack = withSeries => JSON.stringify({v: 2, format: BACKUP_FORMAT, hrMax: userHrMax, profile: PROFILE, gear: GEAR, assign: ASSIGN, edits: EDITS, deleted: [...DELETED], sessions: ALL.map(s => {
+const pack = withSeries => JSON.stringify({v: 2, format: BACKUP_FORMAT, hrMax: userHrMax, profile: PROFILE, gear: GEAR, assign: ASSIGN, edits: EDITS, deleted: [...DELETED], anaSport: ANA_SPORT, sessions: ALL.map(s => {
   const o = {date: s.date.getTime()}; for (const f of FIELDS) if (s[f] != null) o[f] = s[f];
   if (o.deep && !withSeries){ o.deep = {...o.deep}; delete o.deep.s; }
   return o; })});
@@ -569,7 +575,7 @@ function loadStore(){
     const j = JSON.parse((APP ? window.__LIBREFLOW_STORE : localStorage.getItem(STORE)) || 'null');
     if (!j || !Array.isArray(j.sessions)) return null;
     return {sessions: j.sessions.map(s => ({...s, date: new Date(s.date)})), hrMax: j.hrMax || null, profile: j.profile || {},
-      gear: Array.isArray(j.gear) ? j.gear : [], assign: j.assign || {}, edits: j.edits || {}, deleted: j.deleted || []};
+      gear: Array.isArray(j.gear) ? j.gear : [], assign: j.assign || {}, edits: j.edits || {}, deleted: j.deleted || [], anaSport: j.anaSport};
   } catch { return null; }
 }
 try { for (const k of OLD_STORES) if (!localStorage.getItem(STORE) && localStorage.getItem(k)){ localStorage.setItem(STORE, localStorage.getItem(k)); localStorage.removeItem(k); } } catch {}
@@ -623,11 +629,11 @@ function start(sessions){
   const counts = {};
   ALL.forEach(s => counts[s.sport] = (counts[s.sport]||0) + 1);
   const sportsList = Object.keys(counts).sort((a,b) => counts[b]-counts[a]);
-  selected = new Set(sportsList.filter(s => /RUN|LOOP|JOG/.test(s)));
-  if (!selected.size) selected.add(sportsList[0]);
-  $('#sports').innerHTML = '<span class="hint">Include sports: </span>' + sportsList.map(s =>
-    `<label><input type="checkbox" value="${s}" ${selected.has(s)?'checked':''}> ${sportLabel(s)} (${counts[s]})</label>`).join('');
-  $('#sports').querySelectorAll('input').forEach(cb => cb.onchange = () => { cb.checked ? selected.add(cb.value) : selected.delete(cb.value); refresh(); });
+  if (ANA_SPORT && !counts[ANA_SPORT]) ANA_SPORT = '';
+  $('#anaSport').innerHTML = `<option value="">All activities (${ALL.length})</option>` +
+    sportsList.map(sp => `<option value="${sp}">${sportLabel(sp)} (${counts[sp]})</option>`).join('');
+  $('#anaSport').value = ANA_SPORT;
+  $('#sports').innerHTML = '';
   hrMax = isDemo ? null : userHrMax;
   $('#app').classList.remove('hidden');
   $('#appEmpty').classList.add('hidden');
@@ -645,7 +651,7 @@ function estimateHrMax(runs){
 function refresh(){
   ALL.forEach(s => s.pace = s.km > 0 ? s.sec / s.km : null);
   ACTS = ALL;                                                   // Latest Activity / All Activities: every sport
-  RUNS = ALL.filter(s => selected.has(s.sport) && s.km > 0.3);   // Analysis: the selected sports
+  RUNS = ANA_SPORT ? ALL.filter(s => s.sport === ANA_SPORT) : ALL;   // Analysis: all activities or one sport
   const est = estimateHrMax(RUNS);
   if (!hrMax) hrMax = PROFILE.hrMax || est || 190;
   P = prof();
@@ -655,7 +661,7 @@ function refresh(){
     : est ? `(estimated from your data: ${est}; adjust if you know your real max)` : '(no heart rate data found)';
   renderShoes(); renderTable();
   if (ACTS.length){ if (!CUR_RUN || !ACTS.includes(CUR_RUN)) showRun(ACTS[ACTS.length-1]); else showRun(CUR_RUN); }   // open on the newest activity
-  if (!RUNS.length){ $('#kpis').innerHTML = '<p>No activities for the selected sports (Settings).</p>'; return; }
+  if (!RUNS.length){ $('#kpis').innerHTML = '<p>No activities for this selection.</p>'; return; }
   const A = analyse(RUNS);
   renderKpis(A); renderAdvice(A); renderCharts(A); renderDeep(A); renderPred(A); renderRecords(A);
 }
@@ -722,9 +728,9 @@ function analyse(runs){
     const k = `${r.date.getFullYear()}-${pad(r.date.getMonth()+1)}`;
     if (!months.has(k)) months.set(k, {key:k, date:new Date(r.date.getFullYear(), r.date.getMonth(), 15), paces:[], effs:[], km:0, zone:[0,0,0]});
     const m = months.get(k); m.km += r.km;
-    if (okPace(r)) m.paces.push(r.pace);
-    if (r.deep?.ef) m.effs.push(r.deep.ef);
-    else if (r.hrAvg && okPace(r) && r.km >= 3) m.effs.push((r.km*1000/r.sec*60)/r.hrAvg);
+    if (isRunSport(r.sport) && okPace(r)) m.paces.push(r.pace);
+    if (isRunSport(r.sport) && r.deep?.ef) m.effs.push(r.deep.ef);
+    else if (isRunSport(r.sport) && r.hrAvg && okPace(r) && r.km >= 3) m.effs.push((r.km*1000/r.sec*60)/r.hrAvg);
     zoneSec(r).forEach((s,i) => m.zone[i] += s/60);
   });
   const monthArr = [...months.values()].sort((a,b)=>a.date-b.date);
@@ -739,7 +745,7 @@ function analyse(runs){
   const seasonAvg = season.map((k,i) => seasonYears[i] ? k/seasonYears[i] : 0);
 
   // vdot
-  runs.forEach(r => r.vdot = runVdot(r));
+  runs.forEach(r => r.vdot = isRunSport(r.sport) ? runVdot(r) : null);   // VDOT only makes sense for running
   const vruns = runs.filter(r => r.vdot);
   const quarters = new Map();
   vruns.forEach(r => { const k = `${r.date.getFullYear()} K${Math.floor(r.date.getMonth()/3)+1}`; const q = quarters.get(k); if (!q || r.vdot > q.vdot) quarters.set(k, {k, vdot:r.vdot, run:r}); });
@@ -755,7 +761,7 @@ function analyse(runs){
   const zTot = z8.reduce((a,b)=>a+b,0);
 
   // efficiency trend
-  const effOf = list => median(list.filter(r => r.deep?.ef || (r.hrAvg && okPace(r) && r.km >= 3)).map(r => r.deep?.ef || (r.km*1000/r.sec*60)/r.hrAvg));
+  const effOf = list => median(list.filter(r => isRunSport(r.sport)).filter(r => r.deep?.ef || (r.hrAvg && okPace(r) && r.km >= 3)).map(r => r.deep?.ef || (r.km*1000/r.sec*60)/r.hrAvg));
   const effNow = effOf(inLast(56));
   const effPrev = effOf(runs.filter(r => r.date < refEnd - 56*DAY && r.date >= refEnd - 238*DAY));
   const effYearAgo = effOf(runs.filter(r => r.date < refEnd - 309*DAY && r.date >= refEnd - 365*DAY));
@@ -793,13 +799,14 @@ function deepAnalyse(runs, ref, refEnd, monthArr, inLast){
   runs.forEach(r => { const m = mm.get(mk(r.date)); if (!m) return;
     if (r.deep?.dec != null && r.deep.mov >= 40*60) m.dec.push(r.deep.dec);
     if (r.ri) m.ri.push(r.ri);
-    if (r.cad && r.cad > 120 && r.cad < 230) m.cad.push(r.cad); });
+    if (isRunSport(r.sport) && r.cad && r.cad > 120 && r.cad < 230) m.cad.push(r.cad); });
   // best efforts: all time, last 365 days, per quarter
   const DS = [1000, 5000, 10000, 21097];
   const bestOf = list => Object.fromEntries(DS.map(D => [D, list.filter(r => r.deep?.best?.[D]).reduce((a,r) => !a || r.deep.best[D] < a.t ? {t:r.deep.best[D], r} : a, null)]));
-  const pr = bestOf(runs), pr365 = bestOf(runs.filter(r => refEnd - r.date < 365*DAY));
+  const rr = runs.filter(r => isRunSport(r.sport));   // best efforts: running only
+  const pr = bestOf(rr), pr365 = bestOf(rr.filter(r => refEnd - r.date < 365*DAY));
   const q = new Map();
-  runs.forEach(r => { if (!r.deep?.best) return; const k = `${r.date.getFullYear()} K${Math.floor(r.date.getMonth()/3)+1}`;
+  rr.forEach(r => { if (!r.deep?.best) return; const k = `${r.date.getFullYear()} K${Math.floor(r.date.getMonth()/3)+1}`;
     const o = q.get(k) || {k, date: new Date(r.date.getFullYear(), Math.floor(r.date.getMonth()/3)*3+1, 15)}; q.set(k, o);
     for (const D of DS){ const t = r.deep.best[D]; if (t && (!o[D] || t < o[D])) o[D] = t; } });
   const bestQ = [...q.values()].sort((a,b) => a.date - b.date);
@@ -809,7 +816,7 @@ function deepAnalyse(runs, ref, refEnd, monthArr, inLast){
   const decN = inLast(84).filter(r => r.deep?.dec != null && r.deep.mov >= 60*60).length;
   const riNow = median(inLast(56).map(r => r.ri).filter(Boolean));
   const riYear = median(runs.filter(r => r.ri && r.date < refEnd - 309*DAY && r.date >= refEnd - 365*DAY).map(r => r.ri));
-  const cadNow = median(inLast(56).map(r => r.cad).filter(c => c > 120 && c < 230));
+  const cadNow = median(inLast(56).filter(r => isRunSport(r.sport)).map(r => r.cad).filter(c => c > 120 && c < 230));
   return {deepN, load, L, pr, pr365, bestQ, newPr, decRecent, decN, riNow, riYear, cadNow};
 }
 
@@ -819,10 +826,10 @@ function renderKpis(A){
   const yrs = Object.keys(A.years);
   const items = [
     [fmtNum(tot), 'km total'],
-    [fmtNum(A.runs.length), `runs since ${A.runs[0].date.getFullYear()}`],
-    [fmtNum(sec/3600), 'hours run'],
+    [fmtNum(A.runs.length), `${noun(true)} since ${A.runs[0].date.getFullYear()}`],
+    [fmtNum(sec/3600), 'hours'],
     [fmtNum(A.km12w/12,1), 'km/week (12 wk)'],
-    [fmtNum(A.last12.length/12,1), 'runs/week (12 wk)'],
+    [fmtNum(A.last12.length/12,1), `${noun(true)}/week (12 wk)`],
     [A.curVdot ? fmtNum(A.curVdot,1) : '–', 'VDOT (120 days)'],
   ];
   $('#kpis').innerHTML = items.map(([b,s]) => `<div class="kpi"><b>${b}</b><small>${s}</small></div>`).join('');
@@ -845,7 +852,7 @@ function renderAdvice(A){
     if (ch > 0.25) add('warn','Big jump in weekly volume', `Last week ${fmtNum(A.lastW.km,1)} km, ${fmtNum(ch*100)}% above the average of the 4 weeks before. Keep increases around 10%.`);
   }
   if (A.km4w > 0 && A.longest4 / (A.km4w/4) > 0.4 && A.longest4 > 12)
-    add('warn','Long run relatively heavy', `Your longest run (${fmtNum(A.longest4,1)} km) is more than 40% of your average weekly volume. More short easy km during the week makes the long run safer.`);
+    add('warn', `Long ${noun(false)} relatively heavy`, `Your longest ${noun(false)} (${fmtNum(A.longest4,1)} km) is more than 40% of your average weekly volume. More short easy km during the week makes the long run safer.`);
   if (A.zTot > 3*3600){
     const easy = A.z8[0]/A.zTot, mid = A.z8[1]/A.zTot;
     if (easy < 0.65) add('warn','Few truly easy sessions', `Only ${fmtNum(easy*100)}% of your running time (8 wk) was easy (below ${P.aet} bpm), ${fmtNum(mid*100)}% moderate. Most endurance runners improve best with ~75–80% easy and a few targeted hard sessions.`);
@@ -862,7 +869,7 @@ function renderAdvice(A){
   if (A.maxGap > 10) add('info','Break', `In the last 12 weeks there was a gap of ${Math.round(A.maxGap)} days. After a break: first 1–2 weeks at ~70% of your previous volume.`);
   if (A.streak >= 10) add('warn','No rest day', `You have run ${A.streak} days in a row. Plan at least one rest day per week.`);
   const runsPw = A.last12.length/12;
-  if (runsPw < 2.5 && A.runs.length > 50) add('info','Frequency', `On average ${fmtNum(runsPw,1)} runs per week. An extra short easy run (30–40 min) is often the cheapest way to get fitter.`);
+  if (runsPw < 2.5 && A.runs.length > 50) add('info','Frequency', `On average ${fmtNum(runsPw,1)} ${noun(true)} per week. An extra short easy run (30–40 min) is often the cheapest way to get fitter.`);
   const s = A.seasonAvg, lowM = s.indexOf(Math.min(...s)), highM = s.indexOf(Math.max(...s));
   if (Object.keys(A.years).length >= 3) add('info','Your seasonal pattern', `Historically you run most in ${MONTHS[highM]} (${fmtNum(s[highM])} km) and least in ${MONTHS[lowM]} (${fmtNum(s[lowM])} km). Plan target races where your build-up is naturally good.`);
 
@@ -929,7 +936,7 @@ function renderCharts(A){
 
   mkChart('cSeason', {type:'bar', data:{labels:MONTHS.map(m=>m.slice(0,3)), datasets:[{label:'avg km', data:A.seasonAvg.map(v=>Math.round(v)), backgroundColor:c3+'cc', borderRadius:4}]}});
 
-  const pr = A.runs.filter(okPace);
+  const pr = A.runs.filter(r => isRunSport(r.sport) && okPace(r));
   mkChart('cPace', {type:'scatter', data:{datasets:[
     {label:'run', data:pr.map(r=>({x:+r.date, y:r.pace})), backgroundColor:c1+'40', pointRadius:2},
     {label:'monthly median', type:'line', data:A.monthArr.filter(m=>m.paces.length).map(m=>({x:+m.date, y:median(m.paces)})), borderColor:c2, pointRadius:0, borderWidth:2, tension:.3}]},
@@ -969,11 +976,11 @@ function renderPred(A){
 function renderRecords(A){
   const r = A.runs, best = (list, f) => list.reduce((a,x) => !a || f(x) > f(a) ? x : a, null);
   const longest = best(r, x => x.km);
-  const fast = d => best(r.filter(x => x.km >= d && okPace(x)), x => -x.pace);
+  const fast = d => best(r.filter(x => isRunSport(x.sport) && x.km >= d && okPace(x)), x => -x.pace);
   const bw = best(A.weeks, w => w.km);
   const by = Object.entries(A.years).sort((a,b)=>b[1].km-a[1].km)[0];
   const rows = [
-    ['Longest run', longest && `${fmtNum(longest.km,1)} km – ${fmtDate(longest.date)}`],
+    [`Longest ${noun(false)}`, longest && `${fmtNum(longest.km,1)} km – ${fmtDate(longest.date)}`],
     ...[[5,'≥ 5 km'],[10,'≥ 10 km'],[21,'≥ 21 km']].map(([d,l]) => { const x = fast(d); return [`Fastest avg pace ${l}`, x && `${fmtPace(x.pace)} /km (${fmtNum(x.km,1)} km, ${fmtDate(x.date)})`]; }),
     ['Biggest week', bw && `${fmtNum(bw.km,1)} km – week of ${fmtDate(bw.start)}`],
     ['Best year', by && `${by[0]}: ${fmtNum(by[1].km)} km in ${by[1].n} runs`],
@@ -1409,6 +1416,7 @@ for (const [id, key] of [['hrRest','hrRest'], ['aet','aet'], ['ant','ant']])
 $('#loadRange').onchange = () => refresh();
 $('#yearSel').onchange = renderTable;
 $('#sportSel').onchange = renderTable;
+$('#anaSport').onchange = e => { ANA_SPORT = e.target.value; try { localStorage.setItem('libreflow.anaSport', ANA_SPORT); } catch {} saveStore(); refresh(); };
 $('#mapOn').checked = MAP_ON;
 $('#mapOn').onchange = e => { MAP_ON = e.target.checked; try { localStorage.setItem('libreflow.map', MAP_ON ? '1' : '0'); } catch {} if (CUR_RUN) showRoute(CUR_RUN); };
 $('#runsTbl').onclick = e => { const tr = e.target.closest('tr[data-i]'); if (tr){ showRun(TABLE[+tr.dataset.i]); showView('run'); } };
@@ -1463,6 +1471,7 @@ function openDemo(view){
 if (HASH.has('demo')) openDemo(HASH.get('view'));
 else if (stored && stored.sessions.length){
   userHrMax = stored.hrMax; PROFILE = stored.profile; GEAR = stored.gear; ASSIGN = stored.assign; EDITS = stored.edits; DELETED = new Set(stored.deleted);
+  if (typeof stored.anaSport === 'string') ANA_SPORT = stored.anaSport;   // last sport chosen in Analysis
   start(stored.sessions);
   status(`${ALL.length} stored trainings loaded. New imports are added.`);
 } else {

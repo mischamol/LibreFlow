@@ -17,7 +17,7 @@ No Polar Flow, no account, no cloud, no external AI. Everything stays on your iP
   (on): routes on OpenStreetMap – the only internet access the analysis page has; off = route drawn without map.
 - **Make backup**: a ZIP with the summary and the raw data (per-second series and GPS route) of every activity.
 - **Settings**: import (Polar export ZIP, backup, JSON), make backup, CSV, demo data, heart rate and thresholds,
-  sports, connect Strava, forget watch, delete data.
+  shoes, connect Strava, forget watch, delete data.
 
 ## Installing without a paid developer account
 1. Install **Xcode** from the Mac App Store and open it once (install the iOS platform when asked).
