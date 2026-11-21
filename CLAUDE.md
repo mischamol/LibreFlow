@@ -35,7 +35,8 @@ are in `CLAUDE.local.md`, which is not in git.
 - Max speed (Flow's "max pace"): `00/STATS.BPB` field 2 {1 avg, 2 max} km/h; Flow `statistics SPEED max`.
 - Known caveats: altitude looks uncalibrated; BASE field 11 (~20 m) may be ascent or descent, not verified.
 - Strava: file upload (TCX, manual at strava.com/upload/select) is free; the API (direct upload) needs a paid
-  subscription. Both supported; the user has no subscription. In the app every run has Export… (GPX file via `GPXWriter`, TCX without GPS); with Settings › Strava on (default off) it becomes To Strava… (API upload).
+  subscription. Both supported; the user has no subscription. In the app every run has Export… (GPX file via `GPXWriter`, TCX without GPS); with Settings › Strava on (default off) it becomes To Strava… (API upload). Settings › Privacy
+  (`exportHeartRate` default off, `exportGPS` default on, UserDefaults) decides what exports/uploads contain.
 
 ## Files
 - `libreflow.html` – single source of the analysis page (English). Views: Latest Activity (newest run,

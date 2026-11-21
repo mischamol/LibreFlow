@@ -10,6 +10,8 @@ struct SettingsView: View {
     @State private var confirmClear = false
     @State private var forgotWatch = false
     @State private var importing = false
+    @AppStorage("exportHeartRate") private var exportHeartRate = false
+    @AppStorage("exportGPS") private var exportGPS = true
     @State private var hrMax = ""
     @State private var hrRest = ""
     @State private var aet = ""
@@ -67,11 +69,19 @@ struct SettingsView: View {
 
                 ShoesSection()
 
+                // --- privacy: what exports and uploads contain ---
+                Section {
+                    Toggle("Include heart rate", isOn: $exportHeartRate)
+                    Toggle("Include GPS route", isOn: $exportGPS)
+                } header: { Text("Privacy") } footer: {
+                    Text("Applies to Export and To Strava. Heart rate is left out by default. Without the GPS route an export is saved as a TCX file (no map), and the route – including where you start and finish – is not shared.")
+                }
+
                 // --- Strava ---
                 Section {
                     Toggle("Upload to Strava", isOn: $model.stravaEnabled)
                 } header: { Text("Strava") } footer: {
-                    Text("Off by default: runs then have an Export button that saves a GPX file (route, time, elevation, cadence, and heart rate only if you tick it) that you can upload yourself, for example to Strava with a free account. When on, that button becomes To Strava and uploads the run directly via the Strava API, which requires a paid Strava subscription and the connection below.")
+                    Text("Off by default: runs then have an Export button that saves a GPX file (what it contains is set under Privacy) that you can upload yourself, for example to Strava with a free account. When on, that button becomes To Strava and uploads the run directly via the Strava API, which requires a paid Strava subscription and the connection below.")
                 }
                 if model.stravaEnabled {
                 Section {

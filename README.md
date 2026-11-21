@@ -19,7 +19,7 @@ That is why LibreFlow keeps **all data local**:
 - The analysis and advice run **on the device**, with transparent rules: no cloud service, no tracking, no
   external AI looking at your data.
 - Nothing leaves your device unless **you** choose to: exporting a run to Strava is optional, shows a preview
-  first, and includes heart rate only if you tick it.
+  first, and *Settings › Privacy* decides whether heart rate (off by default) and the GPS route are included.
 - Your data stays in **open, readable formats**, and the code is here for anyone to check.
 
 ## What it is
@@ -41,8 +41,8 @@ Every run synced from the watch has an **Export…** button in the app. Two ways
 
 ### File upload (free account)
 
-1. Open a run synced from the watch › **Export…** › choose whether to include heart rate › **Export…** (a GPX file: route, time,
-   elevation, cadence and – only if ticked – heart rate; runs without GPS are saved as TCX)
+1. Open a run synced from the watch › **Export…** › **Export…** (a GPX file with route, time, elevation and cadence; whether heart rate
+   and the GPS route are included is set under *Settings › Privacy*; without GPS it is a TCX file)
    (Files, iCloud Drive or AirDrop to your Mac).
 2. Upload it at **strava.com › + › Upload activity › File** (`https://www.strava.com/upload/select`). On an iPhone,
    Safari needs *Request Desktop Website* for that page; the Strava app cannot import files.

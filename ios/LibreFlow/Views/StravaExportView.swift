@@ -1,8 +1,8 @@
 import SwiftUI
 import MapKit
 
-/// Preview of exactly what would be exported, with an explicit heart-rate choice (off by default).
-/// toStrava = false: save the run as a TCX file. toStrava = true: upload directly via the Strava API (paid subscription).
+/// Preview of exactly what would be exported. What is included (heart rate, GPS route) is set in Settings › Privacy.
+/// toStrava = false: save the run as a GPX file (TCX without GPS). toStrava = true: upload directly via the Strava API (paid subscription).
 struct StravaExportView: View {
     let trainingId: String
     var toStrava = false
@@ -10,7 +10,8 @@ struct StravaExportView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var training: DecodedTraining?
-    @State private var includeHR = false
+    @AppStorage("exportHeartRate") private var includeHR = false   // Settings › Privacy
+    @AppStorage("exportGPS") private var includeGPS = true
     @State private var name = ""
     @State private var busy = false
     @State private var message: String?
@@ -28,7 +29,7 @@ struct StravaExportView: View {
                         LabeledContent("Duration", value: Self.hms(t.durationSec))
                         if t.distanceM > 0 { LabeledContent("Pace", value: Self.pace(t.durationSec / (t.distanceM / 1000)) + " /km") }
                     }
-                    if !t.route.isEmpty {
+                    if includeGPS && !t.route.isEmpty {
                         Section {
                             Map(initialPosition: .automatic) {
                                 MapPolyline(coordinates: t.route.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) })
@@ -40,15 +41,17 @@ struct StravaExportView: View {
                     }
                     Section {
                         if toStrava { TextField("Activity name", text: $name) }
-                        Toggle("Include heart rate", isOn: $includeHR)
+                        LabeledContent("Time, distance, altitude, speed, cadence", value: "Included")
+                        LabeledContent("GPS route", value: includeGPS ? (t.route.isEmpty ? "None recorded" : "Included") : "Left out")
+                        LabeledContent("Heart rate", value: includeHR ? "Included" : "Left out")
                     } header: { Text(toStrava ? "What is sent" : "What is in the file") } footer: {
-                        Text((toStrava ? "Sent" : "Included") + ": GPS route, time, distance, altitude, speed and cadence" + (includeHR ? ", and heart rate (average, maximum and per second)." : ". Heart rate is left out."))
+                        Text("Change what is included under Settings › Privacy.")
                     }
                     if !toStrava {
                         Section {
                             Button { shareFile(t) } label: { Label("Export…", systemImage: "square.and.arrow.up") }
                         } footer: {
-                            Text(t.route.isEmpty ? "This run has no GPS route, so it is saved as a TCX file (Files, iCloud Drive, AirDrop…)." : "Saves the run as a GPX file (Files, iCloud Drive, AirDrop…): route, time, elevation and cadence, plus heart rate if ticked. Upload it yourself, for example at strava.com › + › Upload activity › File (free account; on an iPhone, Safari needs \"Request Desktop Website\" for that page), or open it in any app that reads GPX.")
+                            Text((includeGPS && !t.route.isEmpty ? "Saves the run as a GPX file" : "Saves the run as a TCX file (GPX needs a GPS route)") + " (Files, iCloud Drive, AirDrop…). Upload it yourself, for example at strava.com › + › Upload activity › File (free account; on an iPhone, Safari needs \"Request Desktop Website\" for that page), or open it in another app.")
                         }
                     } else {
                     Section {
@@ -94,13 +97,13 @@ struct StravaExportView: View {
     }
 
     private func upload(_ t: DecodedTraining) async {
-        guard let tcx = TCXWriter.tcx(for: t, includeHeartRate: includeHR) else { message = "Could not build the file."; return }
+        guard let tcx = TCXWriter.tcx(for: t, includeHeartRate: includeHR, includeGPS: includeGPS) else { message = "Could not build the file."; return }
         busy = true; message = "Uploading…"; activityId = nil
         defer { busy = false }
         do {
             let id = try await strava.upload(tcx: tcx, name: name, externalId: "libreflow-\(trainingId)")
             activityId = id
-            message = "Uploaded" + (includeHR ? " with heart rate." : " without heart rate.")
+            message = "Uploaded" + (includeHR ? " with heart rate" : " without heart rate") + (includeGPS ? "." : ", without GPS route.")
         } catch {
             message = error.localizedDescription
         }
@@ -108,9 +111,9 @@ struct StravaExportView: View {
 
     /// GPX (route, time, elevation, cadence, heart rate only if ticked); TCX for runs without GPS, where GPX is empty.
     private func shareFile(_ t: DecodedTraining) {
-        let base = "\(trainingId)\(includeHR ? "" : "-no-hr")"
-        let (text, ext): (String?, String) = t.route.isEmpty
-            ? (TCXWriter.tcx(for: t, includeHeartRate: includeHR), "tcx")
+        let base = "\(trainingId)\(includeHR ? "" : "-no-hr")\(includeGPS ? "" : "-no-gps")"
+        let (text, ext): (String?, String) = !includeGPS || t.route.isEmpty
+            ? (TCXWriter.tcx(for: t, includeHeartRate: includeHR, includeGPS: includeGPS), "tcx")
             : (GPXWriter.gpx(for: t, includeHeartRate: includeHR, name: Self.defaultName(t)), "gpx")
         guard let text else { message = "Could not build the file."; return }
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(base).\(ext)")

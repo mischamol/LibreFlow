@@ -10,9 +10,10 @@ No Polar Flow, no account, no cloud, no external AI. Everything stays on your iP
   charts) and **All Activities**. At the top: **Sync** (reads the watch: read-only plus
   Polar's sync notifications, new days only) and a button for the **sync log**.
   Each run has an *Export…* button (save as file); with *Settings › Strava* on it becomes *To Strava…*.
-- **Export**: preview with map, *Include heart rate* switch (**off** by default), then *Export…* (GPX; TCX for runs without GPS; upload it
+- **Export**: preview with map, then *Export…* (GPX; TCX for runs without GPS; upload it
   yourself, e.g. at strava.com/upload/select with a free account). **To Strava** (Settings › Strava on): direct
   upload via your own Strava API application, which requires a paid Strava subscription.
+- **Settings › Privacy**: include heart rate (**off** by default) and the GPS route (on) in exports and uploads.
 - **Settings**: import (Polar export ZIP, backup, JSON), make backup, CSV, demo data, heart rate and thresholds,
   sports, connect Strava, forget watch, delete data.
 

@@ -1,9 +1,9 @@
 import Foundation
 
 /// Builds a Garmin TCX file (accepted by Strava) from a decoded watch training.
-/// Heart rate is only written when `includeHeartRate` is true.
+/// Heart rate is only written when `includeHeartRate` is true, GPS positions only when `includeGPS` is true.
 enum TCXWriter {
-    static func tcx(for t: DecodedTraining, includeHeartRate: Bool) -> String? {
+    static func tcx(for t: DecodedTraining, includeHeartRate: Bool, includeGPS: Bool = true) -> String? {
         guard let start = t.startDate else { return nil }
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime]
@@ -25,7 +25,7 @@ enum TCXWriter {
             let sec = Double(i) * t.intervalSec
             var x = "<Trackpoint><Time>\(iso.string(from: start.addingTimeInterval(sec)))</Time>"
             if let p = routeAt[Int(sec.rounded())] { lastPos = p }
-            if let p = lastPos, routeAt[Int(sec.rounded())] != nil {
+            if includeGPS, let p = lastPos, routeAt[Int(sec.rounded())] != nil {
                 x += String(format: "<Position><LatitudeDegrees>%.7f</LatitudeDegrees><LongitudeDegrees>%.7f</LongitudeDegrees></Position>", p.lat, p.lon)
             }
             if i < t.altitude.count { x += String(format: "<AltitudeMeters>%.1f</AltitudeMeters>", t.altitude[i]) }
