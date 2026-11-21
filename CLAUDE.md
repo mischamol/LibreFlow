@@ -45,7 +45,11 @@ are in `CLAUDE.local.md`, which is not in git.
   Settings (Mac only: import, backup, HR settings, sports, shoes).
   Latest Activity / All Activities show every sport (speed km/h and no shoes for non-shoe sports; sport filter);
   Analysis uses the selected sports. Edit… per activity: sport, shoes, delete (stored as `edits`/`deleted`, which
-  survive re-imports). Page alert()/confirm() are shown natively in the app (WKUIDelegate). Shoes: brand/model/nickname, "in use since",
+  survive re-imports). Page alert()/confirm() are shown natively in the app (WKUIDelegate).
+  Raw data per activity (full 1 s series + GPS route, `rawOf`) is kept apart from the summary: app files
+  Documents/raw/<key>.json, browser IndexedDB `libreflow-raw`; backups are ZIPs (libreflow-backup.json + raw/). Route view:
+  Leaflet + OpenStreetMap tiles (Leaflet shipped locally in the app; the app's content rule only lets
+  tile.openstreetmap.org through) or, with Show map off, an SVG line. Older/Newer/Export are disabled when they cannot act. Shoes: brand/model/nickname, "in use since",
   default sports, reminder km (default 400), optional distance before tracking, retire/delete; runs auto-assigned to
   the newest default pair in use that day; stored as `gear`/`assign` in the store and backups. No tap/double-tap zoom
   (touch-action, 16px inputs on touch); pinch zoom kept. Computes compact per-second metrics at import (HR histogram,

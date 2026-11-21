@@ -82,10 +82,11 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         wv.navigationDelegate = self
         wv.uiDelegate = self   // show the page's alert() / confirm() as iOS alerts
         wv.isInspectable = true
-        // privacy: the page may not load anything from the internet
+        // privacy: the page may not load anything from the internet, except OpenStreetMap map tiles
+        // (only requested when Settings › Privacy › Show map is on)
         WKContentRuleListStore.default().compileContentRuleList(
-            forIdentifier: "no-network",
-            encodedContentRuleList: #"[{"trigger":{"url-filter":"^(https?|wss?)://"},"action":{"type":"block"}}]"#) { list, _ in
+            forIdentifier: "no-network-but-map-tiles",
+            encodedContentRuleList: #"[{"trigger":{"url-filter":"^(https?|wss?)://"},"action":{"type":"block"}},{"trigger":{"url-filter":"^https://tile\\.openstreetmap\\.org/"},"action":{"type":"ignore-previous-rules"}}]"#) { list, _ in
             if let list { wv.configuration.userContentController.add(list) }
             self.loadPage(wv)
         }
@@ -101,6 +102,7 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         pageReady = true
         showPageView(forTab: tab)
         pushStravaSetting()
+        pushMapSetting()
         importPending()
         Task { await refreshSettings() }
     }
@@ -124,6 +126,22 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         case "store":
             store.saveAnalysisStore(m["text"] as? String ?? "")
             Task { await refreshShoes(); await refreshSettings() }   // keep the native Settings (shoe totals etc.) current
+        case "rawPut":
+            if let k = m["key"] as? String, let t = m["text"] as? String { store.putRaw(k, t) }
+        case "rawGet":
+            let text = (m["key"] as? String).flatMap { store.getRaw($0) }
+            let req = (m["req"] as? NSNumber)?.intValue ?? 0
+            Task { _ = try? await webView.callAsyncJavaScript("__rawReply(id, t)", arguments: ["id": req, "t": text ?? ""], contentWorld: .page) }
+        case "rawDel":
+            if let k = m["key"] as? String { store.deleteRaw(k) }
+        case "rawClear":
+            store.clearRaw()
+        case "backup":
+            let name = (m["name"] as? String ?? "libreflow-backup").replacingOccurrences(of: "/", with: "-")
+            if let zip = store.makeBackupZip(name: name, summary: m["text"] as? String ?? "") {
+                shareURL = ShareItem(url: zip)
+                pageStatus = "Backup made: \(zip.lastPathComponent)"
+            } else { pageStatus = "Could not make the backup." }
         case "share":
             let name = (m["name"] as? String ?? "export.txt").replacingOccurrences(of: "/", with: "-")
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
@@ -160,6 +178,13 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
     }
 
     // MARK: calls into the page
+
+    /// Settings › Privacy › Show map (default on): route on an OpenStreetMap map, or drawn without map tiles
+    func pushMapSetting() {
+        guard pageReady else { return }
+        let on = UserDefaults.standard.object(forKey: "showMap") as? Bool ?? true
+        webView.evaluateJavaScript("window.appSetMap && appSetMap(\(on)); 0")
+    }
 
     func pushStravaSetting() {
         guard pageReady else { return }

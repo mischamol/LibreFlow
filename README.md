@@ -16,6 +16,8 @@ That is why LibreFlow keeps **all data local**:
 
 - The watch is read **directly over Bluetooth**, read-only. No Polar Flow account or cloud is needed.
 - Everything is stored **on your own device** – in your browser or in the iPhone app – and nowhere else.
+- Routes can be shown on an OpenStreetMap map (map tiles for the area you view are loaded from openstreetmap.org);
+  switch the map off and the route is drawn without loading anything.
 - The analysis and advice run **on the device**, with transparent rules: no cloud service, no tracking, no
   external AI looking at your data.
 - Nothing leaves your device unless **you** choose to: exporting a run to Strava is optional, shows a preview

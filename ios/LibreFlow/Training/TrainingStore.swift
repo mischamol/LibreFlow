@@ -11,6 +11,8 @@ final class TrainingStore {
     let root: URL
     var watchDir: URL { root.appendingPathComponent("watch") }
     var sessionsDir: URL { root.appendingPathComponent("sessions") }
+    /// full per-second data + GPS route per activity, written by the analysis page (raw/<key>.json)
+    var rawDir: URL { root.appendingPathComponent("raw") }
     var analysisStoreURL: URL { root.appendingPathComponent("analysis-store.json") }
     private var importedURL: URL { root.appendingPathComponent("imported.json") }
     private var indexURL: URL { watchDir.appendingPathComponent("index.json") }
@@ -68,7 +70,7 @@ final class TrainingStore {
 
     /// Bump when the decoder learns new fields: watch trainings are then decoded again from the raw files on the
     /// phone and handed to the analysis page once more (the newest import wins there). 2 = running index + max speed.
-    static let sessionFormat = 2
+    static let sessionFormat = 3   // 3 = GPS route included (for the route view and the raw data)
     func upgradeSessionsIfNeeded() {
         let key = "sessionFormat"
         guard UserDefaults.standard.integer(forKey: key) < Self.sessionFormat else { return }
@@ -102,6 +104,40 @@ final class TrainingStore {
             }
     }
 
+    // MARK: raw data per activity
+    private func rawURL(_ key: String) -> URL? {
+        guard !key.isEmpty, key.allSatisfy({ $0.isNumber || $0 == "-" }) else { return nil }   // keys are numbers
+        return rawDir.appendingPathComponent("\(key).json")
+    }
+    func putRaw(_ key: String, _ text: String) {
+        guard let u = rawURL(key) else { return }
+        try? fm.createDirectory(at: rawDir, withIntermediateDirectories: true)
+        try? text.write(to: u, atomically: true, encoding: .utf8)
+    }
+    func getRaw(_ key: String) -> String? { rawURL(key).flatMap { try? String(contentsOf: $0, encoding: .utf8) } }
+    func deleteRaw(_ key: String) { if let u = rawURL(key) { try? fm.removeItem(at: u) } }
+    func clearRaw() { try? fm.removeItem(at: rawDir) }
+
+    /// Backup ZIP: libreflow-backup.json (summary from the page) + raw/<key>.json for every activity.
+    func makeBackupZip(name: String, summary: String) -> URL? {
+        let tmp = fm.temporaryDirectory.appendingPathComponent(name)
+        try? fm.removeItem(at: tmp)
+        do {
+            try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+            try summary.write(to: tmp.appendingPathComponent("libreflow-backup.json"), atomically: true, encoding: .utf8)
+            if fm.fileExists(atPath: rawDir.path) { try fm.copyItem(at: rawDir, to: tmp.appendingPathComponent("raw")) }
+        } catch { return nil }
+        var result: URL?
+        var err: NSError?
+        NSFileCoordinator().coordinate(readingItemAt: tmp, options: .forUploading, error: &err) { zip in   // iOS zips a folder for "uploading"
+            let dest = fm.temporaryDirectory.appendingPathComponent("\(name).zip")
+            try? fm.removeItem(at: dest)
+            if (try? fm.copyItem(at: zip, to: dest)) != nil { result = dest }
+        }
+        try? fm.removeItem(at: tmp)
+        return result
+    }
+
     // MARK: analysis page storage
     func loadAnalysisStore() -> String? { try? String(contentsOf: analysisStoreURL, encoding: .utf8) }
     func saveAnalysisStore(_ text: String) {
@@ -115,7 +151,7 @@ final class TrainingStore {
 
     /// Remove everything the app stored.
     func deleteAll() {
-        for u in [watchDir, sessionsDir, analysisStoreURL, importedURL] { try? fm.removeItem(at: u) }
+        for u in [watchDir, sessionsDir, rawDir, analysisStoreURL, importedURL] { try? fm.removeItem(at: u) }
         try? fm.createDirectory(at: watchDir, withIntermediateDirectories: true)
         try? fm.createDirectory(at: sessionsDir, withIntermediateDirectories: true)
     }

@@ -6,6 +6,8 @@
 <title>LibreFlow</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <style>
 :root{
   --bg:#f6f7f9; --card:#ffffff; --ink:#1b1f24; --muted:#5f6b7a; --line:#e3e7ec;
@@ -38,6 +40,9 @@ main{max-width:1200px;margin:0 auto;padding:8px 16px 60px}
 .kpi b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
 .kpi small{color:var(--muted)}
 button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 14px;cursor:pointer}
+button:disabled{opacity:.4;cursor:not-allowed;filter:none}
+#rdRoute{width:100%;height:auto;display:block;background:var(--bg);border:1px solid var(--line);border-radius:10px}
+#rdRoute.hidden,#rdMap.hidden{display:none}
 button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button:hover,.btn:hover{filter:brightness(1.05)}
 input[type=number],select{font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
@@ -157,6 +162,7 @@ ol{padding-left:20px}
       <span class="hint" style="margin:0">From your Polar profile when the export contains it. Easy = below the aerobic threshold, hard = above the anaerobic threshold.</span>
     </div>
     <div class="sports" id="sports" style="margin-top:10px"></div>
+    <label style="display:block;margin-top:10px"><input type="checkbox" id="mapOn"> Show routes on a map (map tiles are loaded from OpenStreetMap; off = route drawn without map background, nothing loaded)</label>
   </section>
   <section class="card" id="shoesCard">
     <div class="row" style="justify-content:space-between">
@@ -178,6 +184,10 @@ ol{padding-left:20px}
     <div class="kpis" id="rdKpis" style="margin:10px 0"></div>
     <p class="hint hidden" id="rdShoeRow" style="margin:0 0 10px"></p>
     <div class="chart" style="height:320px"><canvas id="cRun"></canvas></div>
+    <div id="rdRouteWrap" class="hidden" style="margin-top:14px"><h2 style="font-size:15px">Route</h2>
+      <div id="rdMap" class="hidden" style="height:340px;border-radius:10px;border:1px solid var(--line)"></div>
+      <svg id="rdRoute" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet"></svg>
+      <p class="hint" style="margin:6px 0 0"><span style="color:var(--accent3)">●</span> start <span style="color:var(--accent)">●</span> finish. <span id="rdMapNote"></span></p></div>
     <div class="grid" style="margin-top:14px">
       <div><h2 style="font-size:15px">Kilometres</h2><div class="tablewrap"><table id="rdSplits"></table></div></div>
       <div><h2 style="font-size:15px">Time per zone</h2><div class="chart" style="height:200px"><canvas id="cRunZones"></canvas></div></div>
@@ -468,6 +478,14 @@ async function loadFiles(fileList){
 window.appImport = texts => importEntries(texts.map((t, i) => ({name: `training-session-${i}.json`, text: async () => t})));
 
 async function importEntries(entries){
+  // raw data files from a LibreFlow backup ZIP: raw/<key>.json
+  const rawFiles = entries.filter(e => /(^|\/)raw\/[^/]+\.json$/i.test(e.name));
+  entries = entries.filter(e => !rawFiles.includes(e));
+  for (let i = 0; i < rawFiles.length; i++){
+    if (i % 25 === 0){ status(`Restoring raw data: ${i}/${rawFiles.length}`); await new Promise(r => setTimeout(r)); }
+    const k = rawFiles[i].name.split('/').pop().replace(/\.json$/i, '');
+    if (!DELETED.has(+k)) await RAW.putText(k, await rawFiles[i].text());
+  }
   let cands = entries.filter(e => /training[-_]?session|backup/i.test(e.name));
   if (!cands.length) cands = entries;
   if (!cands.length){ status('No JSON files found. Is this a Polar export or backup?'); return; }
@@ -483,7 +501,13 @@ async function importEntries(entries){
         EDITS = {...(j.edits || {}), ...EDITS}; (j.deleted || []).forEach(k => DELETED.add(k));
         continue;
       }
-      for (const x of (Array.isArray(j) ? j : [j])){ const s = toSession(x); s ? out.push(s) : fail++; }
+      for (const x of (Array.isArray(j) ? j : [j])){
+        const s = toSession(x);
+        if (!s){ fail++; continue; }
+        out.push(s);
+        const raw = rawOf(x);                                   // full per-second data and GPS route, kept for backups and the route
+        if (raw && !DELETED.has(sessionKey(s))) await RAW.put(sessionKey(s), raw);
+      }
     } catch { fail++; }
   }
   if (!out.length){ status(`No trainings recognised in ${cands.length} files. The format may differ.`); return; }
@@ -554,6 +578,7 @@ function clearStore(skipConfirm){
   if (!skipConfirm && !confirm('Delete all stored trainings from this device? Raw watch files are kept.')) return;
   if (APP) APP.postMessage({cmd: 'store', text: ''});
   try { localStorage.removeItem(STORE); } catch {}
+  RAW.clear();
   ALL = []; RUNS = []; ACTS = []; userHrMax = null; isDemo = false; PROFILE = {}; GEAR = []; ASSIGN = {}; EDITS = {}; DELETED = new Set();
   Object.values(charts).forEach(c => c.destroy()); charts = {};
   $('#app').classList.add('hidden');
@@ -1142,13 +1167,111 @@ $('#actDelete').onclick = () => {
   const r = CUR_RUN;
   if (!r || !confirm(`Delete this ${sportLabel(r.sport)} of ${fmtDate(r.date)}? It also stays out of later imports.`)) return;
   const k = sessionKey(r), i = ACTS.indexOf(r);
-  DELETED.add(k); delete ASSIGN[k]; delete EDITS[k];
+  DELETED.add(k); delete ASSIGN[k]; delete EDITS[k]; RAW.del(k);
   ALL = ALL.filter(x => x !== r);
   CUR_RUN = ALL[Math.min(i, ALL.length - 1)] || null;
   $('#actDlg').close();
   saveStore();
   if (ALL.length) refresh(); else { $('#app').classList.add('hidden'); $('#appEmpty').classList.remove('hidden'); }
 };
+
+
+/* ---------- raw data per activity (full per-second series + GPS route) ----------
+   Kept apart from the compact summary: in the iPhone app as files (Documents/raw/<key>.json), in the browser in
+   IndexedDB. Used for the route view and included in backups. Never leaves the device unless you export it. */
+const RAW = (() => {
+  const pending = new Map(); let seq = 0;
+  window.__rawReply = (id, text) => { const p = pending.get(id); if (p){ pending.delete(id); try { p(text ? JSON.parse(text) : null); } catch { p(null); } } };
+  let dbp = null;
+  const db = () => dbp ||= new Promise((res, rej) => {
+    const r = indexedDB.open('libreflow-raw', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('raw');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  const tx = async (mode, fn) => {
+    const d = await db();
+    return new Promise((res, rej) => { const t = d.transaction('raw', mode), q = fn(t.objectStore('raw')); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); });
+  };
+  return {
+    async putText(k, text){ try { if (APP) APP.postMessage({cmd: 'rawPut', key: String(k), text}); else await tx('readwrite', st => st.put(JSON.parse(text), String(k))); } catch {} },
+    async put(k, obj){ return this.putText(k, JSON.stringify(obj)); },
+    async get(k){
+      try {
+        if (APP) return await new Promise(res => { const id = ++seq; pending.set(id, res); APP.postMessage({cmd: 'rawGet', key: String(k), req: id}); });
+        return (await tx('readonly', st => st.get(String(k)))) || null;
+      } catch { return null; }
+    },
+    async del(k){ try { if (APP) APP.postMessage({cmd: 'rawDel', key: String(k)}); else await tx('readwrite', st => st.delete(String(k))); } catch {} },
+    async clear(){ try { if (APP) APP.postMessage({cmd: 'rawClear'}); else await tx('readwrite', st => st.clear()); } catch {} },
+    async all(){   // browser only: [[key, data], …]
+      try { const ks = await tx('readonly', st => st.getAllKeys()), vs = await tx('readonly', st => st.getAll()); return ks.map((k, i) => [k, vs[i]]); } catch { return []; }
+    }
+  };
+})();
+
+// full per-second series and route of one training-session JSON (Polar Flow export or the app's watch format)
+function rawOf(j){
+  const ex = (Array.isArray(j.exercises) ? j.exercises : [])[0] || {};
+  let iv = 1, hr = null, speed = null, distance = null, cadence = null, altitude = null, route = [];
+  const fl = ex.samples?.samples;
+  if (Array.isArray(fl)){
+    iv = (fl[0]?.intervalMillis || 1000) / 1000;
+    const get = t => { const x = fl.find(s => s.type === t); return x ? x.values.map(v => { const n = +v; return isFinite(n) ? n : null; }) : null; };
+    hr = get('HEART_RATE'); speed = get('SPEED'); distance = get('DISTANCE'); cadence = get('CADENCE'); altitude = get('ALTITUDE');
+    route = (ex.routes?.route?.wayPoints || []).filter(p => isFinite(+p.latitude) && isFinite(+p.longitude))
+      .map(p => [Math.round((+p.elapsedMillis || 0) / 100) / 10, +(+p.latitude).toFixed(6), +(+p.longitude).toFixed(6)]);
+  } else if (ex.samples && (ex.samples.heartRate || ex.samples.speed)){
+    const w = ex.samples; iv = w.intervalSec || 1;
+    hr = w.heartRate || null; speed = w.speed || null; distance = w.distance || null; cadence = w.cadence || null; altitude = w.altitude || null;
+  }
+  if (Array.isArray(ex.route)) route = ex.route.filter(p => p && isFinite(p.lat) && isFinite(p.lon)).map(p => [p.t, +(+p.lat).toFixed(6), +(+p.lon).toFixed(6)]);
+  if (!hr && !speed && !route.length) return null;
+  return {v: 1, iv, hr, speed, distance, cadence, altitude, route};
+}
+
+// Settings › Privacy (app) / Settings (browser): route on an OpenStreetMap map, or as a line without map background
+let MAP_ON = APP ? true : (() => { try { return localStorage.getItem('libreflow.map') !== '0'; } catch { return true; } })();
+window.appSetMap = on => { MAP_ON = !!on; if (CUR_RUN) showRoute(CUR_RUN); };
+let MAP = null, MAP_LAYER = null;
+function drawMap(pts){
+  if (!MAP){
+    MAP = L.map('rdMap', {zoomControl: true, attributionControl: true});
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap contributors'}).addTo(MAP);
+  }
+  if (MAP_LAYER) MAP_LAYER.remove();
+  const ll = pts.map(p => [p[1], p[2]]);
+  MAP_LAYER = L.layerGroup([
+    L.polyline(ll, {color: css('--accent2'), weight: 4}),
+    L.circleMarker(ll[0], {radius: 7, color: '#fff', weight: 2, fillColor: css('--accent3'), fillOpacity: 1}),
+    L.circleMarker(ll[ll.length - 1], {radius: 7, color: '#fff', weight: 2, fillColor: css('--accent'), fillOpacity: 1})
+  ]).addTo(MAP);
+  setTimeout(() => { MAP.invalidateSize(); MAP.fitBounds(L.latLngBounds(ll), {padding: [20, 20]}); });
+}
+// route as a line (equirectangular, north up), no map tiles
+function showRoute(r){
+  $('#rdRouteWrap').classList.add('hidden');
+  (r.demoRoute ? Promise.resolve({route: r.demoRoute}) : RAW.get(sessionKey(r))).then(raw => {
+    if (CUR_RUN !== r || !raw?.route || raw.route.length < 2) return;
+    const useMap = MAP_ON && window.L;
+    $('#rdMap').classList.toggle('hidden', !useMap); $('#rdRoute').classList.toggle('hidden', !!useMap);
+    $('#rdMapNote').textContent = useMap ? 'Map tiles © OpenStreetMap contributors, loaded from openstreetmap.org (turn off under Settings).'
+      : 'Drawn on this device without a map background, so nothing is loaded from the internet.';
+    $('#rdRouteWrap').classList.remove('hidden');
+    if (useMap){ drawMap(raw.route); return; }
+    const pts = raw.route, lat0 = pts.reduce((a, p) => a + p[1], 0) / pts.length, kx = Math.cos(lat0 * Math.PI / 180);
+    const xs = pts.map(p => p[2] * kx), ys = pts.map(p => -p[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const w = Math.max(maxX - minX, 1e-6), h = Math.max(maxY - minY, 1e-6), W = 1000, H = Math.round(Math.min(1000, Math.max(320, W * h / w))), pad = 30;
+    const sc = Math.min((W - 2*pad) / w, (H - 2*pad) / h), ox = (W - w * sc) / 2, oy = (H - h * sc) / 2;
+    const step = Math.max(1, Math.floor(pts.length / 1500)), P = i => `${(ox + (xs[i] - minX) * sc).toFixed(1)},${(oy + (ys[i] - minY) * sc).toFixed(1)}`;
+    let d = 'M' + P(0); for (let i = step; i < pts.length; i += step) d += 'L' + P(i); d += 'L' + P(pts.length - 1);
+    const [sx, sy] = P(0).split(','), [fx, fy] = P(pts.length - 1).split(',');
+    const svg = $('#rdRoute'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.innerHTML = `<path d="${d}" fill="none" stroke="${css('--accent2')}" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>` +
+      `<circle cx="${sx}" cy="${sy}" r="14" fill="${css('--accent3')}"/><circle cx="${fx}" cy="${fy}" r="14" fill="${css('--accent')}"/>`;
+    $('#rdRouteWrap').classList.remove('hidden');
+  });
+}
 
 let CUR_RUN = null;
 // the app's Settings › Strava switch (off by default) turns the Export button into To Strava (direct upload via the API)
@@ -1158,6 +1281,9 @@ function showRun(r){
   const d = r.deep, card = $('#runDetail');
   CUR_RUN = r;
   $('#rdStrava').classList.toggle('hidden', !APP);   // always in the app; Export, or To Strava when that option is on
+  $('#rdStrava').disabled = !r.wid;                  // only activities synced from the watch have the files to export
+  $('#rdStrava').title = r.wid ? '' : 'Only activities synced from the watch with this app can be exported';
+  showRoute(r);
   $('#rdStrava').textContent = STRAVA_ON ? 'To Strava…' : 'Export…';
   const i = ACTS.indexOf(r);
   $('#rdPrev').disabled = i <= 0; $('#rdNext').disabled = i < 0 || i >= ACTS.length - 1;
@@ -1192,7 +1318,7 @@ function showRun(r){
   const z = zoneSec(r);
   mkChart('cRunZones', {type:'bar', data:{labels:[`easy <${P.aet}`, `moderate ${P.aet}–${P.ant}`, `hard >${P.ant}`],
     datasets:[{data:z.map(s=>Math.round(s/60)), backgroundColor:[css('--accent3'), css('--warn'), css('--accent')], borderRadius:4}]},
-    options:{indexAxis:'y', plugins:{tooltip:{callbacks:{label:c=>`${c.raw} min`}}}}});
+    options:{indexAxis:'y', plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>`${c.raw} min`}}}}});
 }
 
 function exportCsv(){
@@ -1201,10 +1327,19 @@ function exportCsv(){
   const rows = ALL.map(r => [r.date.toISOString(), r.sport, r.km.toFixed(3), Math.round(r.sec), r.km > 0 ? Math.round(r.sec/r.km) : '', r.hrAvg, r.hrMax, r.ascent, r.kcal, r.cad, r.name].map(esc).join(','));
   saveFile('polar-trainings.csv', head.join(',') + '\n' + rows.join('\n'), 'text/csv');
 }
-function exportBackup(){
+// backup = ZIP with the summary (libreflow-backup.json) and the raw data of every activity (raw/<key>.json)
+async function exportBackup(){
   if (!ALL.length || isDemo){ status('Nothing to back up yet.'); return; }
-  saveFile(`libreflow-backup-${new Date().toISOString().slice(0,10)}.json`, pack(true), 'application/json');
-  status(`Backup of ${ALL.length} trainings made. Load this file on another device with "Choose file".`);
+  const name = `libreflow-backup-${new Date().toISOString().slice(0,10)}`;
+  if (APP){ APP.postMessage({cmd: 'backup', name, text: pack(true)}); status(`Making backup of ${ALL.length} activities with raw data…`); return; }
+  status('Making backup…');
+  const zip = new JSZip();
+  zip.file('libreflow-backup.json', pack(true));
+  const raws = await RAW.all();
+  raws.forEach(([k, v]) => zip.file(`raw/${k}.json`, JSON.stringify(v)));
+  const blob = await zip.generateAsync({type: 'blob', compression: 'DEFLATE'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name + '.zip'; a.click();
+  status(`Backup of ${ALL.length} activities made (${raws.length} with raw data). Load the ZIP on another device with "Choose file".`);
 }
 
 /* ---------- wiring ---------- */
@@ -1220,11 +1355,11 @@ $('#btnDemo').onclick = () => {
 $('#btnClear').onclick = clearStore;
 $('#btnBackup').onclick = exportBackup;
 $('#rdStrava').onclick = () => {
-  if (!APP || !CUR_RUN) return;
-  if (!CUR_RUN.wid){ alert('Only runs synced from the watch with this app can be exported: runs from the Polar Flow export have no raw files on this phone.'); return; }
+  if (!APP || !CUR_RUN || !CUR_RUN.wid) return;   // greyed out for activities without watch files (Polar Flow import)
   APP.postMessage({cmd: 'strava', id: CUR_RUN.wid, toStrava: STRAVA_ON});
 };
 function showView(v){
+  if (v === 'run' && MAP) setTimeout(() => MAP.invalidateSize());
   if (APP && document.body.dataset.view !== v) APP.postMessage({cmd: 'view', view: v});   // keep the app's tab bar in step
   document.body.dataset.view = v;
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
@@ -1274,6 +1409,8 @@ for (const [id, key] of [['hrRest','hrRest'], ['aet','aet'], ['ant','ant']])
 $('#loadRange').onchange = () => refresh();
 $('#yearSel').onchange = renderTable;
 $('#sportSel').onchange = renderTable;
+$('#mapOn').checked = MAP_ON;
+$('#mapOn').onchange = e => { MAP_ON = e.target.checked; try { localStorage.setItem('libreflow.map', MAP_ON ? '1' : '0'); } catch {} if (CUR_RUN) showRoute(CUR_RUN); };
 $('#runsTbl').onclick = e => { const tr = e.target.closest('tr[data-i]'); if (tr){ showRun(TABLE[+tr.dataset.i]); showView('run'); } };
 $('#rdPrev').onclick = () => { const i = ACTS.indexOf(CUR_RUN); if (i > 0) showRun(ACTS[i-1]); };
 $('#rdNext').onclick = () => { const i = ACTS.indexOf(CUR_RUN); if (i >= 0 && i < ACTS.length-1) showRun(ACTS[i+1]); };
@@ -1303,6 +1440,12 @@ function demoDeep(r){
   r.deep = {hist, mov: Math.round(r.sec), ef: +((vAvg*1000/60) / r.hrAvg).toFixed(4), dec: +(2 + 5*rnd()).toFixed(1), splits, s: S,
     best: Object.fromEntries([1000, 5000, 10000].filter(D => r.km*1000 >= D).map(D => [D, Math.round(r.pace * D/1000 * (D === 1000 ? 0.9 : 0.96))]))};
   r.vmax = +(vAvg * 1.35).toFixed(2); r.ri = Math.round(46 + 10*rnd());
+  // fictional route (a wobbly loop in Utrecht matching the distance), kept in memory only: demo data is never stored
+  const R = r.km * 1000 / (2 * Math.PI), lat0 = 52.0907 + (rnd() - .5) * 0.02, lon0 = 5.1214 + (rnd() - .5) * 0.03, np = 300, ph = rnd() * 6;
+  r.demoRoute = Array.from({length: np + 1}, (_, i) => {
+    const a = i / np * 2 * Math.PI, rr = R * (1 + 0.25 * Math.sin(3 * a + ph) + 0.1 * Math.sin(7 * a));
+    return [Math.round(i / np * r.sec), +(lat0 + rr * Math.sin(a) / 111320).toFixed(6), +(lon0 + rr * Math.cos(a) / (111320 * Math.cos(lat0 * Math.PI / 180))).toFixed(6)];
+  });
 }
 function openDemo(view){
   isDemo = true;

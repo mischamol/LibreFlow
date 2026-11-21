@@ -13,7 +13,9 @@ No Polar Flow, no account, no cloud, no external AI. Everything stays on your iP
 - **Export**: preview with map, then *Export…* (GPX; TCX for runs without GPS; upload it
   yourself, e.g. at strava.com/upload/select with a free account). **To Strava** (Settings › Strava on): direct
   upload via your own Strava API application, which requires a paid Strava subscription.
-- **Settings › Privacy**: include heart rate (**off** by default) and the GPS route (on) in exports and uploads.
+- **Settings › Privacy**: include heart rate (**off** by default) and the GPS route (on) in exports and uploads; *Show map*
+  (on): routes on OpenStreetMap – the only internet access the analysis page has; off = route drawn without map.
+- **Make backup**: a ZIP with the summary and the raw data (per-second series and GPS route) of every activity.
 - **Settings**: import (Polar export ZIP, backup, JSON), make backup, CSV, demo data, heart rate and thresholds,
   sports, connect Strava, forget watch, delete data.
 

@@ -52,6 +52,10 @@ struct DecodedTraining {
         if let v = ascentM { j["ascent"] = v }
         if let v = hrAvg { j["averageHeartRate"] = v }
         if let v = hrMax { j["maximumHeartRate"] = v }
+        if !route.isEmpty, var e = (j["exercises"] as? [[String: Any]])?.first {   // stays on the phone (route view, backups)
+            e["route"] = route.map { ["t": $0.t, "lat": $0.lat, "lon": $0.lon] }
+            j["exercises"] = [e]
+        }
         return j
     }
 }

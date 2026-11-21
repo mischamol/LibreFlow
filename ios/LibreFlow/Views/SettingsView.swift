@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var importing = false
     @AppStorage("exportHeartRate") private var exportHeartRate = false
     @AppStorage("exportGPS") private var exportGPS = true
+    @AppStorage("showMap") private var showMap = true
     @State private var hrMax = ""
     @State private var hrRest = ""
     @State private var aet = ""
@@ -73,8 +74,10 @@ struct SettingsView: View {
                 Section {
                     Toggle("Include heart rate", isOn: $exportHeartRate)
                     Toggle("Include GPS route", isOn: $exportGPS)
+                    Toggle("Show map", isOn: $showMap)
+                        .onChange(of: showMap) { _, _ in model.pushMapSetting() }
                 } header: { Text("Privacy") } footer: {
-                    Text("Applies to Export and To Strava. Heart rate is left out by default. Without the GPS route an export is saved as a TCX file (no map), and the route – including where you start and finish – is not shared.")
+                    Text("Show map: routes are shown on OpenStreetMap; the map tiles for the area you view are loaded from openstreetmap.org. Off: the route is drawn without a map and nothing is loaded from the internet. The two switches above apply to Export and To Strava. Heart rate is left out by default. Without the GPS route an export is saved as a TCX file (no map), and the route – including where you start and finish – is not shared.")
                 }
 
                 // --- Strava ---

@@ -15,6 +15,8 @@ DST = os.path.join(ROOT, "ios", "LibreFlow", "Web", "index.html")
 PAIRS = [
     ('<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>', '<script src="jszip.min.js"></script>'),
     ('<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>', '<script src="chart.umd.min.js"></script>'),
+    ('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">', '<link rel="stylesheet" href="leaflet.css">'),
+    ('<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>', '<script src="leaflet.js"></script>'),
     ('Your own Polar history, analysed locally.', 'Your own Polar history, analysed on your phone.'),
     # (the import card itself is hidden in the app: importing lives in the app's Settings tab)
     ('Unzip it and choose the folder. Error: ', 'Try a backup made on your Mac instead. Error: '),
