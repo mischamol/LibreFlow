@@ -35,6 +35,7 @@ targets:
         PRODUCT_NAME: LibreFlow
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         INFOPLIST_KEY_CFBundleDisplayName: LibreFlow
         INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "LibreFlow reads your trainings directly from your Polar watch via Bluetooth. Nothing on the watch is changed."

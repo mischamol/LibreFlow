@@ -27,7 +27,7 @@ That is why LibreFlow keeps **all data local**:
 Private, local analysis of your Polar running data. Tested with a Polar Grit X (firmware 3.1.0).
 
 - **Browser page** (`libreflow.html`): open it in Safari or Chrome and load your Polar Flow export.
-- **iPhone app** (`ios/`): reads the watch directly over Bluetooth, shows the same analysis and can export a run
+- **iPhone app** (`ios/`, or the `.ipa` under **Releases** for SideStore): reads the watch directly over Bluetooth, shows the same analysis and can export a run
   to Strava (heart rate only if you tick it).
 - **Bluetooth tool** (`polar_ble.py`): read-only download of trainings from the watch on a Mac/PC.
 

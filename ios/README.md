@@ -39,6 +39,17 @@ xcrun devicectl device install app --device <iPhone UDID> build/Build/Products/D
 **Free account:** the app works for 7 days. Then connect the iPhone and install again. Your data is kept as long
 as you do not delete the app. At most 3 self-installed apps at a time.
 
+### Installing with SideStore (refresh without a Mac)
+1. Download `LibreFlow.ipa` from the repository's **Releases** page, or build it yourself: `zsh tools/make_ipa.sh`
+   → `ios/build/LibreFlow.ipa`. It is unsigned (SideStore signs it with your Apple ID), uses the neutral bundle id
+   `app.libreflow` and is stripped of debug symbols, so it contains nothing of the person who built it.
+2. Put the file on the iPhone (AirDrop or iCloud Drive).
+3. SideStore › **My Apps** › **+** › choose `LibreFlow.ipa` (SideStore's VPN on).
+4. Every 7 days: SideStore › My Apps › **Refresh All**.
+
+SideStore changes the bundle identifier, so this is a separate app from the one installed with Xcode, with its own
+(empty) data: make a backup in the old app first, or import the Polar export ZIP again.
+
 ## First use
 1. **Watch**: tap **Sync** in *Analysis*. If the watch is already paired with the iPhone you do not need to do
    anything on the watch (the watch's own sync button is meant for Polar Flow and makes the watch wait for
@@ -55,3 +66,4 @@ as you do not delete the app. At most 3 self-installed apps at a time.
 ## After changes
 - Changed `libreflow.html`? Just build again (the app version is generated automatically).
 - Changed `project.yml`? Run `xcodegen generate` in this folder first.
+- App icon: drawn by `tools/make_icon.py` into `LibreFlow/Assets.xcassets/AppIcon.appiconset/AppIcon.png`.
