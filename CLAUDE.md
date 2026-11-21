@@ -1,6 +1,6 @@
 # LibreFlow – project context
 
-See also `README.md` and `ios/README.md`. Personal, machine-specific details (device, signing team, data locations)
+See also `README.md` (the iPhone app, main product) and `web/README.md` (browser version + BLE tool). Personal, machine-specific details (device, signing team, data locations)
 are in `CLAUDE.local.md`, which is not in git.
 
 ## Goal
@@ -9,7 +9,7 @@ are in `CLAUDE.local.md`, which is not in git.
 - Optional sharing to Strava, heart rate only by explicit choice, always with a preview.
 
 ## Preferences (important)
-- Talk to the user in **Dutch**. All UI texts and documentation (app, `libreflow.html`, READMEs) in **English**.
+- Talk to the user in **Dutch**. All UI texts and documentation (app, `web/libreflow.html`, READMEs) in **English**.
 - No external AI on the data. Advice is rule-based / on-device.
 - Share nothing without permission. Process locally. Never commit personal data (watch downloads, exports, logs,
   signing settings): see `.gitignore`.
@@ -18,7 +18,7 @@ are in `CLAUDE.local.md`, which is not in git.
   approved by the user. Ask permission for any other message sent to the watch.
 - The watch's own "sync" button is meant for Polar Flow and makes the watch wait for Flow; with the app the user
   just taps Sync in the app (the paired watch is found via `retrieveConnectedPeripherals` or scanning).
-- Bluetooth commands of `polar_ble.py` on the Mac: Claude cannot run them (macOS TCC kills Python started by Claude).
+- Bluetooth commands of `web/polar_ble.py` on the Mac: Claude cannot run them (macOS TCC kills Python started by Claude).
   The user runs them in their own zsh terminal; never give a `!` prefix (zsh history expansion once emptied files via `tee`).
 
 ## Findings
@@ -39,7 +39,9 @@ are in `CLAUDE.local.md`, which is not in git.
   (`exportHeartRate` default off, `exportGPS` default on, UserDefaults) decides what exports/uploads contain.
 
 ## Files
-- `libreflow.html` – single source of the analysis page (English). Views: Latest Activity (newest run,
+- Layout: the iPhone app is the main product and lives at the repo root; the browser version and BLE tool are in
+  `web/`. Screenshots in `docs/screenshots/` (demo data).
+- `web/libreflow.html` – single source of the analysis page (English). Views: Latest Activity (newest run,
   older/newer, shoes choice, pace avg / max, running index vs. 8-week median), Analysis (advice at the top as compact
   expandable items with the top one open, KPIs, charts, deep analysis, predictions, records), All Activities (list),
   Settings (Mac only: import, backup, HR settings, map, shoes).
@@ -59,15 +61,15 @@ are in `CLAUDE.local.md`, which is not in git.
   the preview pane (data: URL) cannot store. In the app (`window.webkit.messageHandlers.libreflow`) storage, share,
   Strava and view switching go through the native side; the app's Settings tab uses
   `appSettings/appSetSettings/appCommand/appImportZip` and `appShoes/appSaveShoe/appDeleteShoe`.
-- `ios/` – iPhone app "LibreFlow" (SwiftUI, xcodegen `project.yml`; the `.xcodeproj` is generated and not in git).
+- iPhone app "LibreFlow" at the root: `LibreFlow/` sources (SwiftUI, xcodegen `project.yml`; the `.xcodeproj` is generated and not in git).
   Native BLE PSFTP (`BLE/`), decoder/storage (`Training/`, identical to Python), Strava upload with the user's own
   Strava API app + TCX (`Strava/`). Tabs Latest Activity / Analysis / All Activities share one WKWebView (`WebSlot`), plus a
-  native Settings tab. `Web/index.html` is generated from `libreflow.html` by `ios/tools/make_app_page.py`
-  (pre-build step). Signing: `ios/Local.xcconfig` (from `Local.xcconfig.example`). Build with
+  native Settings tab. `LibreFlow/Web/index.html` is generated from `web/libreflow.html` by `tools/make_app_page.py`
+  (pre-build step). Signing: `Local.xcconfig` (from `Local.xcconfig.example`). Build with
   `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` if xcode-select points to the Command Line Tools;
   install with `xcrun devicectl device install app`. Sync log on the phone: `Documents/sync-log.txt`
   (`devicectl device copy from --domain-type appDataContainer`).
-- `polar_ble.py` – scan/services/ls/get/pull/explore/training/decode, `all` (bulk download, resumable, `index.json` +
+- `web/polar_ble.py` – scan/services/ls/get/pull/explore/training/decode, `all` (bulk download, resumable, `index.json` +
   `.compleet` markers, `--since`, `--max`) and `export` (-> `trainingen_json/`, `--full` adds GPS). Options `--debug`,
   `--pair` (Windows only), `--sync`. Old Dutch names (`alles`, `exporteer`, `--vanaf`, `--volledig`) are aliases.
   Internal names in `horloge_data/` (`.compleet`, `gecontroleerde_dagen`) are kept for compatibility.

@@ -224,7 +224,7 @@ ol{padding-left:20px}
   </section>
 
   <div class="grid">
-    <section class="card"><h2>Km per year</h2><p class="hint">Total and number of runs.</p><div class="chart"><canvas id="cYear"></canvas></div></section>
+    <section class="card"><h2>Km per year</h2><p class="hint" id="yearHint">Total and number of activities.</p><div class="chart"><canvas id="cYear"></canvas></div></section>
     <section class="card"><h2>Seasonal pattern</h2><p class="hint">Average km per calendar month over all years.</p><div class="chart"><canvas id="cSeason"></canvas></div></section>
     <section class="card"><h2>Pace trend</h2><p class="hint">Average pace per run (min/km) and monthly median.</p><div class="chart"><canvas id="cPace"></canvas></div></section>
     <section class="card"><h2>Aerobic efficiency</h2><p class="hint">Metres per heartbeat (speed ÷ heart rate), monthly median. Higher = fitter.</p><div class="chart"><canvas id="cEff"></canvas></div></section>
@@ -929,9 +929,10 @@ function renderCharts(A){
     options:{plugins:{legend:{display:true}}, scales:{x:{ticks:{maxTicksLimit:12, autoSkip:true}}}}});
 
   const ys = Object.keys(A.years);
+  $('#yearHint').textContent = `Total and number of ${noun(true)}.`;
   mkChart('cYear', {type:'bar', data:{labels:ys, datasets:[
     {label:'km', data:ys.map(y=>Math.round(A.years[y].km)), backgroundColor:c1+'cc', borderRadius:4, yAxisID:'y'},
-    {label:'runs', type:'line', data:ys.map(y=>A.years[y].n), borderColor:c2, backgroundColor:c2, yAxisID:'y1'}]},
+    {label:noun(true), type:'line', data:ys.map(y=>A.years[y].n), borderColor:c2, backgroundColor:c2, yAxisID:'y1'}]},
     options:{plugins:{legend:{display:true}}, scales:{y1:{position:'right', grid:{display:false}}}}});
 
   mkChart('cSeason', {type:'bar', data:{labels:MONTHS.map(m=>m.slice(0,3)), datasets:[{label:'avg km', data:A.seasonAvg.map(v=>Math.round(v)), backgroundColor:c3+'cc', borderRadius:4}]}});

@@ -1,11 +1,11 @@
 #!/bin/zsh
 # Builds an unsigned Release LibreFlow.ipa for SideStore (or another sideloading tool that signs the app itself).
-# Output: ios/build/LibreFlow.ipa (ignored by git). Run from anywhere: zsh ios/tools/make_ipa.sh
+# Output: build/LibreFlow.ipa (ignored by git). Run from anywhere: zsh tools/make_ipa.sh
 # Uses a neutral bundle id (app.libreflow) and no team, so nothing from your Local.xcconfig ends up in the .ipa.
 set -euo pipefail
 
-IOS_DIR="${0:A:h:h}"
-cd "$IOS_DIR"
+ROOT="${0:A:h:h}"
+cd "$ROOT"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 
 if [[ project.yml -nt LibreFlow.xcodeproj/project.pbxproj ]] && command -v xcodegen >/dev/null; then
@@ -31,4 +31,4 @@ fi
 (cd "$STAGE" && zip -qr -X ../LibreFlow.ipa Payload)
 rm -rf "$STAGE"
 
-echo "Created $IOS_DIR/build/LibreFlow.ipa ($(du -h build/LibreFlow.ipa | cut -f1))"
+echo "Created $ROOT/build/LibreFlow.ipa ($(du -h build/LibreFlow.ipa | cut -f1))"

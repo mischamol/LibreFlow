@@ -12,13 +12,13 @@ training-session*.json
 sync-log.txt
 CLAUDE.local.md
 
-# Personal signing settings (copy ios/Local.xcconfig.example)
-ios/Local.xcconfig
+# Personal signing settings (copy Local.xcconfig.example)
+Local.xcconfig
 
 # Generated
-ios/*.xcodeproj/
-ios/LibreFlow/Web/index.html
-ios/build/
+*.xcodeproj/
+LibreFlow/Web/index.html
+build/
 DerivedData/
 xcuserdata/
 __pycache__/

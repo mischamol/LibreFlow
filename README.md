@@ -1,5 +1,15 @@
 # LibreFlow
 
+An iPhone app that reads your Polar watch directly over Bluetooth, analyses your trainings on the phone and – only
+when you choose to – exports a training or sends it to Strava. No Polar Flow, no account, no cloud, no external AI.
+Tested with a Polar Grit X (firmware 3.1.0).
+
+| Latest Activity | Analysis | All Activities | Settings |
+|---|---|---|---|
+| ![Latest Activity](docs/screenshots/latest-run.png) | ![Analysis](docs/screenshots/analysis.png) | ![All Activities](docs/screenshots/all-runs.png) | ![Settings](docs/screenshots/settings.png) |
+
+*Fictional demo data.* There is also a [browser version](web/README.md) of the same analysis for a Mac or PC.
+
 ## Why: digital autonomy
 
 A sports watch records some of the most personal data there is: your heart rate, second by second, where you live
@@ -15,7 +25,7 @@ yours, even if an app or account disappears.
 That is why LibreFlow keeps **all data local**:
 
 - The watch is read **directly over Bluetooth**, read-only. No Polar Flow account or cloud is needed.
-- Everything is stored **on your own device** – in your browser or in the iPhone app – and nowhere else.
+- Everything is stored **on your own device** and nowhere else.
 - Routes can be shown on an OpenStreetMap map (map tiles for the area you view are loaded from openstreetmap.org);
   switch the map off and the route is drawn without loading anything.
 - The analysis and advice run **on the device**, with transparent rules: no cloud service, no tracking, no
@@ -24,91 +34,107 @@ That is why LibreFlow keeps **all data local**:
   first, and *Settings › Privacy* decides whether heart rate (off by default) and the GPS route are included.
 - Your data stays in **open, readable formats**, and the code is here for anyone to check.
 
-## What it is
+## What is in the app
+- **Latest Activity**: your newest activity (older/newer), with pace or speed, heart rate, running index, a chart,
+  the route on a map, kilometre splits and time per zone. **Edit…** changes the sport or shoes, or deletes it.
+- **Analysis**: advice at the top, key figures, charts, deep analysis, predictions and records. Choose *All
+  activities* or one sport at the top; the app remembers your choice.
+- **All Activities**: every activity, with a filter by sport.
+- **Sync** (top right): reads new trainings from the watch – read-only, plus Polar's sync notifications. The
+  button next to it shows the **sync log**.
+- **Export…** on every activity synced from the watch: a preview with map, then a GPX file (TCX for runs without
+  GPS). With *Settings › Strava* on it becomes **To Strava…** (direct upload, paid Strava subscription).
+- **Settings**: import (Polar export ZIP, backup, JSON), make backup (a ZIP with the summary and the raw data:
+  per-second series and GPS route of every activity), CSV, demo data, heart rate and thresholds, shoes, privacy,
+  Strava, forget watch, delete data.
+- **Settings › Privacy**: include heart rate (**off** by default) and the GPS route (on) in exports and uploads;
+  *Show map* (on): routes on OpenStreetMap – the only internet access the analysis has; off = route drawn without
+  a map.
 
-Private, local analysis of your Polar running data. Tested with a Polar Grit X (firmware 3.1.0).
+## Install
 
-- **Browser page** (`libreflow.html`): open it in Safari or Chrome and load your Polar Flow export.
-- **iPhone app** (`ios/`, or the `.ipa` under **Releases** for SideStore): reads the watch directly over Bluetooth, shows the same analysis and can export a run
-  to Strava (heart rate only if you tick it).
-- **Bluetooth tool** (`polar_ble.py`): read-only download of trainings from the watch on a Mac/PC.
+### With SideStore (no Mac needed to refresh)
+1. Download `LibreFlow.ipa` from the **Releases** page (or build it yourself: `zsh tools/make_ipa.sh` →
+   `build/LibreFlow.ipa`). It is unsigned (SideStore signs it with your Apple ID), uses the neutral bundle id
+   `app.libreflow` and is stripped of debug symbols, so it contains nothing of the person who built it.
+2. Put the file on the iPhone (AirDrop or iCloud Drive).
+3. SideStore › **My Apps** › **+** › choose `LibreFlow.ipa` (SideStore's VPN on).
+4. Every 7 days: SideStore › My Apps › **Refresh All**.
+
+SideStore changes the bundle identifier, so this is a separate app from one installed with Xcode, with its own
+(empty) data: make a backup in the old app first, or import the Polar export ZIP again.
+
+### With Xcode (free Apple ID is enough)
+1. Install **Xcode** from the Mac App Store and open it once (install the iOS platform when asked).
+2. Xcode › Settings › Accounts › **+** › Apple ID: sign in with your normal Apple ID. A *Personal Team* appears.
+3. Copy `Local.xcconfig.example` to `Local.xcconfig` and fill in your Team ID (Xcode › Settings › Accounts › your
+   Apple ID) and a unique bundle identifier. This file stays out of git.
+4. Install XcodeGen (`brew install xcodegen`), run `xcodegen generate` in this folder and open
+   `LibreFlow.xcodeproj` (generated, not in git).
+5. Connect the iPhone with a cable, unlock it and tap *Trust This Computer*.
+6. iPhone: Settings › Privacy & Security › **Developer Mode** on (the iPhone restarts).
+7. Choose your iPhone as destination in Xcode and click **▶︎ (Run)**.
+8. First time: iPhone › Settings › General › VPN & Device Management › your Apple ID › **Trust**. Then ▶︎ again.
+
+Command line instead of Xcode's ▶︎:
+```
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+xcodebuild -project LibreFlow.xcodeproj -scheme LibreFlow -destination 'generic/platform=iOS' -derivedDataPath build -allowProvisioningUpdates build
+xcrun devicectl device install app --device <iPhone UDID> build/Build/Products/Debug-iphoneos/LibreFlow.app
+```
+
+**Free account:** the app works for 7 days. Then connect the iPhone and install again. Your data is kept as long
+as you do not delete the app. At most 3 self-installed apps at a time.
+
+## First use
+1. **Watch**: tap **Sync**. If the watch is already paired with the iPhone you do not need to do anything on the
+   watch (the watch's own sync button is meant for Polar Flow and makes the watch wait for Polar Flow). Never
+   paired? Put the watch in pairing mode (Settings › General settings › Pair and sync › Pair and sync phone) and
+   accept the pairing request.
+2. **History**: the watch keeps only a few complete trainings. For your full history, download your data from
+   Polar (account.polar.com › Download your data, ~75 MB) and import the ZIP via *Settings › Import file…*.
+   A backup made in the browser version (*Make backup*) works too.
 
 ## Strava (optional)
-Every run synced from the watch has an **Export…** button in the app. Two ways to get a run on Strava:
+Two ways to get a run on Strava:
 
-- **File upload – free Strava account.** *Export…* saves the run as a **GPX file** and you upload it yourself. Nothing is
-  sent automatically.
-- **Direct upload – paid Strava subscription.** Strava's API requires a subscription. Switch on *Settings ›
-  Strava › Upload to Strava*: the button becomes **To Strava…** and uploads the run for you after the preview.
+- **File upload – free Strava account.** *Export…* saves the run as a **GPX file** (route, time, elevation and
+  cadence; heart rate and the GPS route as set under *Settings › Privacy*; without GPS it is a TCX file). Save it
+  to Files, iCloud Drive or AirDrop it to your Mac, and upload it at **strava.com › + › Upload activity › File**
+  (`https://www.strava.com/upload/select`). On an iPhone, Safari needs *Request Desktop Website* for that page;
+  the Strava app cannot import files.
+- **Direct upload – paid Strava subscription.** Strava's API requires a subscription.
+  1. On strava.com go to `https://www.strava.com/settings/api` and create an API application with
+     *Authorization Callback Domain* `localhost`.
+  2. In the app: *Settings › Strava* › switch on **Upload to Strava**, then under *Direct upload* enter the Client
+     ID and Client Secret and tap **Connect Strava**.
+  3. The activity button is now **To Strava…** › **Upload to Strava**.
 
-### File upload (free account)
+## Folders
+- `LibreFlow/` – the app (SwiftUI): `BLE/` (Polar's PSFTP protocol over Bluetooth), `Training/` (decoder and
+  storage), `Strava/` (GPX/TCX and upload), `Views/`, `Web/` (the analysis page and its local libraries).
+- `project.yml` – XcodeGen project; `Local.xcconfig.example` – template for your signing settings.
+- `tools/` – `make_app_page.py` (builds `LibreFlow/Web/index.html` from `web/libreflow.html` at every build),
+  `make_ipa.sh` (unsigned IPA for SideStore), `make_icon.py` (app icon).
+- `web/` – the [browser version](web/README.md) and the Bluetooth tool for a Mac or PC.
 
-1. Open a run synced from the watch › **Export…** › **Export…** (a GPX file with route, time, elevation and cadence; whether heart rate
-   and the GPS route are included is set under *Settings › Privacy*; without GPS it is a TCX file)
-   (Files, iCloud Drive or AirDrop to your Mac).
-2. Upload it at **strava.com › + › Upload activity › File** (`https://www.strava.com/upload/select`). On an iPhone,
-   Safari needs *Request Desktop Website* for that page; the Strava app cannot import files.
+## After changes
+- Changed the analysis? Edit `web/libreflow.html` (the single source) and build again; the app version is
+  generated automatically.
+- Changed `project.yml`? Run `xcodegen generate` first.
+- App icon: drawn by `tools/make_icon.py` into `LibreFlow/Assets.xcassets/AppIcon.appiconset/AppIcon.png`.
 
-### Direct upload (paid subscription)
-1. On strava.com go to `https://www.strava.com/settings/api` and create an API application with
-   *Authorization Callback Domain* `localhost`.
-2. In the app: *Settings › Strava* › switch on **Upload to Strava**, then under *Direct upload* enter the Client ID
-   and Client Secret and tap **Connect Strava**.
-3. The run button is now **To Strava…** › **Upload to Strava**.
+## Troubleshooting
+- The sync log is also written to `sync-log.txt` in the app's folder (Files app, or
+  `xcrun devicectl device copy from --domain-type appDataContainer --domain-identifier <bundle id> --source Documents/sync-log.txt`).
 
-## Screenshots
-Fictional demo data. Try it yourself: open `libreflow.html#demo` (add `&view=trends`, `runs` or `settings`).
-
-| Latest Activity | Analysis | All Activities | Settings |
-|---|---|---|---|
-| ![Latest Activity](docs/screenshots/latest-run.png) | ![Analysis](docs/screenshots/analysis.png) | ![All Activities](docs/screenshots/all-runs.png) | ![Settings](docs/screenshots/settings.png) |
-
-On a wide screen:
-
-![Analysis on a wide screen](docs/screenshots/desktop-analysis.png)
-
-## Files
-- `libreflow.html` – analysis app for the browser: tabs **Latest Activity** (the newest run, older/newer),
-  **Analysis** (advice, charts, predictions, records), **All Activities** (list of all activities, filter by sport) and **Settings** (import, backup, heart
-  rate and thresholds, map, shoes). Reads the Polar Flow export (ZIP or folder), `training-session*.json` files and
-  backups. Data is kept in the browser's local storage only; open the file in Safari or Chrome.
-- `polar_ble.py` – Bluetooth tool (Polar's PSFTP protocol). Reads files; with `--sync` it only sends Polar's
-  sync start/stop notifications. Nothing on the watch is written or deleted.
-- `ios/` – the iPhone app **LibreFlow** (see [ios/README.md](ios/README.md)).
-- `horloge_dump/`, `horloge_data/` – raw training files downloaded from the watch (contain GPS routes: keep private).
-- `trainingen_json/` – decoded watch trainings for the analysis page.
-- `polar-user-data-export_…/` – Polar Flow data export (private: GPS, date of birth).
-
-## What is proven to work
+## How the watch is read
 - Service `FEEE` with characteristics `FB005C51` (request/response), `FB005C52` (notifications from the watch),
   `FB005C53` (notifications to the watch).
-- Pairing is required (otherwise "Insufficient Authentication"); on Windows it must happen in the same connection.
+- Pairing is required (otherwise "Insufficient Authentication").
 - Sync session as in the Polar BLE SDK: `INITIALIZE_SESSION (8)`, `START_SYNC (0)` … `STOP_SYNC (1, completed=true)`,
-  `TERMINATE_SESSION (9)` on `FB005C53`.
+  `TERMINATE_SESSION (9)` on `FB005C53`. Nothing on the watch is written or deleted.
 - Trainings: `/U/0/<YYYYMMDD>/E/<HHMMSS>/` with `TSESS.BPB`, `00/BASE.BPB`, `00/STATS.BPB`, `00/SAMPLES.GZB`
   (1 s series), `00/ROUTE.GZB` (GPS). Decoding verified against the watch's own summary.
-- Windows: reconnecting to the paired watch fails (link not encrypted, MTU 23, "Unreachable").
-  macOS and iOS (CoreBluetooth): pairing, sync and reconnecting all work (20 Nov 2026).
-- The watch keeps only a few complete trainings; the full history comes from the Polar Flow export.
-
-## Using polar_ble.py on the Mac
-```
-python3 -m pip install bleak
-python3 polar_ble.py scan
-python3 polar_ble.py --sync ls "Grit X" /U/0/
-```
-First time: put the watch in pairing mode (Settings › General settings › Pair and sync › Pair and sync phone) and
-accept the pairing request. On macOS the address is a UUID; part of the name (`"Grit X"`) works too.
-Terminal needs Bluetooth permission (System Settings › Privacy & Security › Bluetooth). Run Bluetooth commands
-yourself in Terminal: started from Claude, macOS stops Python because Claude has no Bluetooth permission.
-
-### Download all trainings
-Read-only and resumable: interrupted? Just start again, it continues where it stopped.
-```
-python3 polar_ble.py --sync all "Grit X" --max 3     # trial run: 3 trainings
-python3 polar_ble.py --sync all "Grit X"             # everything since 2023 (--since YYYYMMDD) -> horloge_data/
-python3 polar_ble.py export                          # -> trainingen_json/ (with 1 s series, without GPS)
-```
-Then open `libreflow.html` › Settings › Choose folder › `trainingen_json`.
-`export --full` also includes the GPS route. The earlier Dutch names (`alles`, `exporteer`, `--vanaf`,
-`--volledig`) still work.
+- Sources: [Polar BLE SDK](https://github.com/polarofficial/polar-ble-sdk) and the file formats in
+  [cmaion/polar](https://github.com/cmaion/polar).

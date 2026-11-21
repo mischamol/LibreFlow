@@ -1,4 +1,4 @@
-"""Draws the LibreFlow app icon (1024x1024, opaque) into the asset catalog. Run: python3 ios/tools/make_icon.py"""
+"""Draws the LibreFlow app icon (1024x1024, opaque) into the asset catalog. Run: python3 tools/make_icon.py"""
 import math
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
