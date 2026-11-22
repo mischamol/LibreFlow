@@ -7,14 +7,17 @@ that reads trainings from the watch over Bluetooth.
 
 ![Analysis on a wide screen](../docs/screenshots/desktop-analysis.png)
 
-*Fictional demo data.* Try it yourself: open `libreflow.html#demo` (add `&view=trends`, `runs` or `settings`).
+<img src="../docs/screenshots/settings.png" alt="Settings in the browser" width="320">
+
+*Fictional demo data.* Try it yourself: open `libreflow.html#demo` (add `&view=trends`, `plan`, `runs` or `settings`).
 
 ## libreflow.html
 Open it in Safari or Chrome (double-click it in the Finder) and load your Polar Flow export.
 
 - Tabs **Latest Activity** (newest activity, older/newer, route on a map), **Analysis** (advice, charts,
-  predictions, records; one sport or all), **All Activities** (list, filter by sport) and **Settings** (import,
-  backup, heart rate and thresholds, map, shoes).
+  predictions, records; one sport or all), **Running Plan** (adaptive training plan for a goal race, with the reasoning and
+  sources per session), **All Activities** (list, filter by sport) and **Settings** (import, backup, heart rate and
+  thresholds, map, shoes).
 - Reads the Polar Flow export (ZIP or unzipped folder), `training-session*.json` files, the `trainingen_json`
   folder from `polar_ble.py` and backups (ZIP, also from the app).
 - Data is kept only in the browser's local storage (summary) and IndexedDB (raw per-second data and routes).

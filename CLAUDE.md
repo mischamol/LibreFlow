@@ -44,7 +44,23 @@ are in `CLAUDE.local.md`, which is not in git.
 - `web/libreflow.html` – single source of the analysis page (English). Views: Latest Activity (newest run,
   older/newer, shoes choice, pace avg / max, running index vs. 8-week median), Analysis (advice at the top as compact
   expandable items with the top one open, KPIs, charts, deep analysis, predictions, records), All Activities (list),
-  Settings (Mac only: import, backup, HR settings, map, shoes).
+  Running Plan (adaptive training plan, see below), Settings (Mac only: import, backup, HR settings, map, shoes).
+  Plan: goal {dist 5k/10k/10mi/half/marathon/custom (+km), date, optional time, days/week, long-run day} in `PLAN` (store + backups).
+  `buildPlan()` recomputes everything from the actual running on every refresh (volume from the 4-week average,
+  +≤10%/week, lighter week every 4th week anchored to `PLAN.created`, long run ≤ +10% of the longest in 30 days,
+  phases counted back from the race, taper per Bosquet, paces from current VDOT); this week's past sessions are
+  marked done/missed and the rest shares the remaining distance. History (2 years, `planMetrics`): best 8-week average volume, active months (≥ 4 runs), best VDOT; experienced
+  (≥ 12 of 24 months) → peak may aim for that volume and grow 15%/week while below 90% of it; no recent VDOT →
+  best of 2 years × 0.93; regaining that VDOT counts in the target check (sources van Poppel 2021, Mujika 2000,
+  Coyle 1984; marked as rule of thumb). Other distances: `goalSpec()` interpolates the parameters between the four `GOALS` anchors; > 42.2 km is
+  treated as a marathon with an ultra warning and no VDOT prediction. Dates use calendar arithmetic (`addDays`), not ms, because of DST.
+  Without history: `#vPlan` sits outside `#app` (works with 0 trainings; startup renders it); optional
+  `goal.self` {km, long, m, sec} counts only for its window after `PLAN.created` (28/30/120 days) and only where
+  the data shows less (`selfReport`). Below 25 km/week no hard sessions; warm-up/cool-down 2 km below 35 km/week.
+  Flags: load spike (ACWR > 1.3), efficiency drop
+  (fatigue), ≥ 14 days off. Feasibility (time, volume, long run, target VDOT) → status, Analysis advice and an
+  alert() once when it turns infeasible after a new activity; `PLAN.log` keeps the last 20 updates. Every session
+  has a "Why" with numbered sources (`PLAN_SRC`). App tab 4 = page view `plan`.
   Latest Activity / All Activities show every sport (speed km/h and no shoes for non-shoe sports; sport filter);
   Analysis has its own selector at the top (All activities, default, or one sport; `ANA_SPORT`, localStorage);
   pace-based parts (pace, efficiency, VDOT, predictions, best efforts, cadence) only use running sports. No sport

@@ -4,9 +4,9 @@ An iPhone app that reads your Polar watch directly over Bluetooth, analyses your
 when you choose to – exports a training or sends it to Strava. No Polar Flow, no account, no cloud, no external AI.
 Tested with a Polar Grit X (firmware 3.1.0).
 
-| Latest Activity | Analysis | All Activities | Settings |
+| Latest Activity | Analysis | Running Plan | All Activities |
 |---|---|---|---|
-| ![Latest Activity](docs/screenshots/latest-run.png) | ![Analysis](docs/screenshots/analysis.png) | ![All Activities](docs/screenshots/all-runs.png) | ![Settings](docs/screenshots/settings.png) |
+| ![Latest Activity](docs/screenshots/latest-run.png) | ![Analysis](docs/screenshots/analysis.png) | ![Running Plan](docs/screenshots/plan.png) | ![All Activities](docs/screenshots/all-runs.png) |
 
 *Fictional demo data.* There is also a [browser version](web/README.md) of the same analysis for a Mac or PC.
 
@@ -39,6 +39,14 @@ That is why LibreFlow keeps **all data local**:
   the route on a map, kilometre splits and time per zone. **Edit…** changes the sport or shoes, or deletes it.
 - **Analysis**: advice at the top, key figures, charts, deep analysis, predictions and records. Choose *All
   activities* or one sport at the top; the app remembers your choice.
+- **Running Plan**: an adaptive training plan for a goal race (5 km, 10 km, 10 miles, half, marathon or any distance you
+  enter, on a date, optionally with a target time). It is rebuilt from what you actually ran after every activity: weekly distance grows from your real
+  volume (experienced runners may rebuild faster towards the volume they sustained in the last 2 years), paces follow your current fitness, missed sessions are not made up, load spikes and fatigue signals turn
+  hard sessions into easy ones. It also works without any history: enter your current km/week, longest recent run and a recent race time
+  (each only counts for the period it describes), or start from scratch with easy running only. When the goal is
+  no longer feasible you get a message. Every session explains why it
+  looks the way it does, with numbered references to the research it is based on (Daniels, Seiler, Bosquet,
+  Frandsen and others). Rule-based and on the device, like the rest of the analysis.
 - **All Activities**: every activity, with a filter by sport.
 - **Sync** (top right): reads new trainings from the watch – read-only, plus Polar's sync notifications. The
   button next to it shows the **sync log**.

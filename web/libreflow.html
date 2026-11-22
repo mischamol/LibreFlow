@@ -78,8 +78,8 @@ th{color:var(--muted);font-weight:600}
 #tabs button{border-radius:999px}
 #tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 /* views: Run (latest / selected run), Trends, Runs (list), Settings */
-body:not([data-view=run]) #vRun,body:not([data-view=trends]) #vTrends,body:not([data-view=runs]) #vRuns,
-body:not([data-view=settings]) #settingsView,body[data-view=settings] #app,body[data-view=settings] #appEmpty{display:none}
+body:not([data-view=run]) #vRun,body:not([data-view=trends]) #vTrends,body:not([data-view=runs]) #vRuns,body:not([data-view=plan]) #vPlan,
+body:not([data-view=settings]) #settingsView,body[data-view=settings] #app,body[data-view=settings] #appEmpty,body[data-view=plan] #appEmpty{display:none}
 #tabs{flex-wrap:wrap}
 #prs,#pred,#records{overflow-x:auto}
 #prs td,#records td{white-space:normal}
@@ -106,6 +106,26 @@ fieldset label{display:inline-flex;gap:6px;align-items:center;margin:2px 12px 2p
 #runsTbl tr[data-i]:hover td{background:var(--info-bg)}
 #runsTbl tr.deep td:first-child::after{content:" •";color:var(--accent3)}
 details summary{cursor:pointer;color:var(--accent2)}
+/* training plan */
+.pweek{border-top:1px solid var(--line);padding:8px 0}
+.pweek>summary{color:var(--ink);font-weight:600;list-style:none}
+.pweek>summary::-webkit-details-marker{display:none}
+.pweek>summary small{color:var(--muted);font-weight:400}
+.pweek.now>summary{color:var(--accent)}
+.psess{display:grid;grid-template-columns:92px 1fr;gap:2px 10px;padding:8px 0;border-bottom:1px dashed var(--line)}
+.psess:last-child{border-bottom:0}
+.psess .pd{color:var(--muted);font-size:13px}
+.psess .pt b{font-weight:600}
+.psess.done .pt b::after{content:" ✓";color:var(--accent3)}
+.psess.missed{opacity:.6}
+.psess.missed .pt b{text-decoration:line-through}
+.psess.today .pd{color:var(--accent);font-weight:600}
+.psess details{font-size:13px;color:var(--muted);margin-top:2px}
+.psess details p{margin:4px 0}
+.psess .tag{display:inline-block;font-size:11px;border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:1px;background:var(--info-bg);color:var(--ink)}
+.psess .tag.q{background:var(--warn-bg)}
+.psess .tag.r{background:var(--bad-bg)}
+sup a{text-decoration:none}
 ol{padding-left:20px}
 </style>
 </head>
@@ -114,7 +134,7 @@ ol{padding-left:20px}
   <h1>Libre<span>Flow</span></h1>
   <p class="sub">Your own Polar history, analysed locally. Nothing is uploaded: everything stays on this device.</p>
 </header>
-<nav id="tabs"><button data-view="run" class="on">Latest Activity</button><button data-view="trends">Analysis</button><button data-view="runs">All Activities</button><button data-view="settings">Settings</button></nav>
+<nav id="tabs"><button data-view="run" class="on">Latest Activity</button><button data-view="trends">Analysis</button><button data-view="plan">Running Plan</button><button data-view="runs">All Activities</button><button data-view="settings">Settings</button></nav>
 <main>
 
 <div class="adv warn hidden" id="noStore"><b>This view cannot store anything</b>
@@ -253,7 +273,42 @@ ol{padding-left:20px}
     <section class="card"><h2>Records</h2><p class="hint" id="recHint">Based on whole activities.</p><div id="records"></div></section>
   </div>
 </div>
-
+</div>
+<div id="vPlan">
+  <section class="card" id="planGoalCard">
+    <h2>Running plan</h2>
+    <div id="planGoalSummary"></div>
+    <form id="planForm" class="hidden">
+      <p class="hint">Choose a goal race. The plan is built from what you actually ran and is recalculated after every activity.</p>
+      <div class="formGrid">
+        <label>Distance <select id="pgDist"><option value="5k">5 km</option><option value="10k">10 km</option><option value="10mi">10 miles</option><option value="half">Half marathon</option><option value="marathon" selected>Marathon</option><option value="custom">Other distance…</option></select></label>
+        <label id="pgKmBox" class="hidden">Distance (km) <input type="number" id="pgKm" min="3" max="100" step="0.1" placeholder="e.g. 15"></label>
+        <label>Race date <input type="date" id="pgDate" required></label>
+        <label>Target time (optional) <input type="text" id="pgTime" placeholder="h:mm:ss" inputmode="numeric"></label>
+        <label>Running days per week <select id="pgDays"><option>3</option><option selected>4</option><option>5</option><option>6</option></select></label>
+        <label>Long run on <select id="pgLong"><option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option><option value="4">Friday</option><option value="5">Saturday</option><option value="6" selected>Sunday</option></select></label>
+      </div>
+      <details id="pgSelfBox"><summary>No (recent) running in your data?</summary>
+        <p class="hint" style="margin:6px 0">Tell the plan where you are now. Each value only counts for the period it describes (4 weeks, 30 days, 120 days) and only when your activities show less; after that your real training takes over.</p>
+        <div class="formGrid">
+          <label>Running now (km/week) <input type="number" id="pgSelfKm" min="0" max="250" step="1" placeholder="from your data"></label>
+          <label>Longest run last month (km) <input type="number" id="pgSelfLong" min="0" max="60" step="0.5" placeholder="from your data"></label>
+          <label>Recent race or time trial <select id="pgSelfRace"><option value="">none</option><option value="5000">5 km</option><option value="10000">10 km</option><option value="21097.5">Half marathon</option><option value="42195">Marathon</option></select></label>
+          <label>Its time <input type="text" id="pgSelfTime" placeholder="h:mm:ss" inputmode="numeric"></label>
+        </div>
+      </details>
+      <div class="row"><button type="submit" class="primary" id="pgSave">Create plan</button><button type="button" id="pgCancel" class="hidden">Cancel</button></div>
+    </form>
+  </section>
+  <div id="planBody" class="hidden">
+    <div id="planStatus"></div>
+    <div class="kpis" id="planKpis"></div>
+    <p class="hint" id="planHistory" style="margin:10px 2px 0"></p>
+    <section class="card"><h2>Updates</h2><p class="hint">After every new activity the plan is checked against what you did.</p><div id="planLog"></div></section>
+    <section class="card"><h2>Weeks</h2><p class="hint" id="planWeeksHint"></p><div id="planWeeks"></div></section>
+    <section class="card"><h2>Training paces</h2><p class="hint" id="planPaceHint"></p><div id="planPaces"></div></section>
+    <section class="card"><h2>Sources</h2><p class="hint">The plan uses rules derived from these publications. It is a rule-based guide, not medical advice: listen to your body, and see a doctor with pain or illness.</p><ol id="planSources" style="font-size:13px"></ol></section>
+  </div>
 </div>
 <dialog id="actDlg"><form method="dialog" id="actForm">
   <h2 style="margin:0">Edit activity</h2>
@@ -508,6 +563,7 @@ async function importEntries(entries){
         if (j.profile && !PROFILE.date) PROFILE = j.profile;
         if (Array.isArray(j.gear) && !GEAR.length){ GEAR = j.gear; ASSIGN = {...(j.assign || {}), ...ASSIGN}; }
         EDITS = {...(j.edits || {}), ...EDITS}; (j.deleted || []).forEach(k => DELETED.add(k));
+        if (j.plan?.goal && !PLAN?.goal) PLAN = j.plan;
         continue;
       }
       for (const x of (Array.isArray(j) ? j : [j])){
@@ -556,7 +612,7 @@ function dedupe(list){
 const FIELDS = ['sport','km','sec','hrAvg','hrMax','ascent','kcal','cad','ri','vmax','load','name','deep','wid'];
 const BACKUP_FORMAT = 'libreflow-backup', OLD_BACKUP_FORMATS = ['run-analysis-backup', 'hardloop-analyse-backup'];
 const APP = window.webkit?.messageHandlers?.libreflow;   // running inside the iPhone app
-const pack = withSeries => JSON.stringify({v: 2, format: BACKUP_FORMAT, hrMax: userHrMax, profile: PROFILE, gear: GEAR, assign: ASSIGN, edits: EDITS, deleted: [...DELETED], anaSport: ANA_SPORT, sessions: ALL.map(s => {
+const pack = withSeries => JSON.stringify({v: 2, format: BACKUP_FORMAT, hrMax: userHrMax, profile: PROFILE, gear: GEAR, assign: ASSIGN, edits: EDITS, deleted: [...DELETED], anaSport: ANA_SPORT, plan: PLAN, sessions: ALL.map(s => {
   const o = {date: s.date.getTime()}; for (const f of FIELDS) if (s[f] != null) o[f] = s[f];
   if (o.deep && !withSeries){ o.deep = {...o.deep}; delete o.deep.s; }
   return o; })});
@@ -579,7 +635,7 @@ function loadStore(){
     const j = JSON.parse((APP ? window.__LIBREFLOW_STORE : localStorage.getItem(STORE)) || 'null');
     if (!j || !Array.isArray(j.sessions)) return null;
     return {sessions: j.sessions.map(s => ({...s, date: new Date(s.date)})), hrMax: j.hrMax || null, profile: j.profile || {},
-      gear: Array.isArray(j.gear) ? j.gear : [], assign: j.assign || {}, edits: j.edits || {}, deleted: j.deleted || [], anaSport: j.anaSport};
+      gear: Array.isArray(j.gear) ? j.gear : [], assign: j.assign || {}, edits: j.edits || {}, deleted: j.deleted || [], anaSport: j.anaSport, plan: j.plan || null};
   } catch { return null; }
 }
 try { for (const k of OLD_STORES) if (!localStorage.getItem(STORE) && localStorage.getItem(k)){ localStorage.setItem(STORE, localStorage.getItem(k)); localStorage.removeItem(k); } } catch {}
@@ -589,12 +645,13 @@ function clearStore(skipConfirm){
   if (APP) APP.postMessage({cmd: 'store', text: ''});
   try { localStorage.removeItem(STORE); } catch {}
   RAW.clear();
-  ALL = []; RUNS = []; ACTS = []; userHrMax = null; isDemo = false; PROFILE = {}; GEAR = []; ASSIGN = {}; EDITS = {}; DELETED = new Set();
+  ALL = []; RUNS = []; ACTS = []; userHrMax = null; isDemo = false; PROFILE = {}; GEAR = []; ASSIGN = {}; EDITS = {}; DELETED = new Set(); PLAN = null;
   Object.values(charts).forEach(c => c.destroy()); charts = {};
   $('#app').classList.add('hidden');
   $('#appEmpty').classList.remove('hidden');
   $('#settingsCard').classList.add('hidden');
   $('#btnClear').classList.add('hidden');
+  renderPlan();
   status('Stored data deleted.');
 }
 
@@ -667,6 +724,7 @@ function refresh(){
     : est ? `(estimated from your data: ${est}; adjust if you know your real max)` : '(no heart rate data found)';
   renderShoes(); renderTable();
   if (ACTS.length){ if (!CUR_RUN || !ACTS.includes(CUR_RUN)) showRun(ACTS[ACTS.length-1]); else showRun(CUR_RUN); }   // open on the newest activity
+  renderPlan();
   if (!RUNS.length){ $('#kpis').innerHTML = '<p>No activities for this selection.</p>'; return; }
   const A = analyse(RUNS);
   renderKpis(A); renderAdvice(A); renderCharts(A); renderDeep(A); renderPred(A); renderRecords(A);
@@ -911,6 +969,8 @@ function renderAdvice(A){
     if (km >= g.alertKm) add('warn', `Shoes: ${escH(shoeName(g))} at ${fmtNum(km)} km`, `Past your reminder of ${fmtNum(g.alertKm)} km. Worn cushioning raises the load on your legs; consider a new pair, then mark these as retired (Settings › Shoes), or raise the reminder.`);
   });
 
+  if (PLAN_OUT && PLAN_OUT.level === 2) add('bad', 'Running goal not feasible as planned', `${PLAN_OUT.status.filter(x => x.lvl === 'bad').map(x => x.t + ': ' + x.x).join(' ')} See the Running Plan tab.`);
+  else if (PLAN_OUT && PLAN_OUT.level === 1) add('warn', 'Running goal: caveats', `${PLAN_OUT.status.filter(x => x.lvl === 'warn').map(x => x.t).join('; ')}. See the Running Plan tab.`);
   const order = {bad:0, warn:1, good:2, info:3};
   $('#advice').innerHTML = out.sort((a,b)=>order[a.lvl]-order[b.lvl]).map((o,i) => `<details class="adv ${o.lvl}"${i === 0 ? ' open' : ''}><summary>${o.t}</summary><div>${o.x}</div></details>`).join('') || '<p>Too little recent data for advice.</p>';
 }
@@ -1188,7 +1248,7 @@ $('#actDelete').onclick = () => {
   CUR_RUN = ALL[Math.min(i, ALL.length - 1)] || null;
   $('#actDlg').close();
   saveStore();
-  if (ALL.length) refresh(); else { $('#app').classList.add('hidden'); $('#appEmpty').classList.remove('hidden'); }
+  if (ALL.length) refresh(); else { $('#app').classList.add('hidden'); $('#appEmpty').classList.remove('hidden'); renderPlan(); }
 };
 
 
@@ -1374,6 +1434,462 @@ $('#rdStrava').onclick = () => {
   if (!APP || !CUR_RUN || !CUR_RUN.wid) return;   // greyed out for activities without watch files (Polar Flow import)
   APP.postMessage({cmd: 'strava', id: CUR_RUN.wid, toStrava: STRAVA_ON});
 };
+/* ---------- adaptive training plan ----------
+   Rule-based and on-device. The plan is rebuilt from your actual running every time the data changes, so it adapts
+   after every activity: volume starts from what you really ran, paces follow your current fitness, missed sessions are
+   not made up, load spikes and fatigue turn hard sessions into easy ones. Every rule names its source (PLAN_SRC). */
+const PLAN_SRC = {
+  DANIELS: "Daniels J. Daniels' Running Formula, 3rd ed. Human Kinetics, 2014. (VDOT, training paces E/M/T/I, limits per session type)",
+  SEILER2006: 'Seiler KS, Kjerland GØ. Quantifying training intensity distribution in elite endurance athletes: is there evidence for an "optimal" distribution? Scand J Med Sci Sports 2006;16:49–56.',
+  STOGGL2014: 'Stöggl T, Sperlich B. Polarized training has greater impact on key endurance variables than threshold, high intensity, or high volume training. Front Physiol 2014;5:33.',
+  CASADO2021: 'Casado A, Hanley B, Santos-Concejero J, Ruiz-Pérez LM. World-class long-distance running performances are best predicted by volume of easy runs and deliberate practice of short-interval and tempo runs. J Strength Cond Res 2021;35:2525–2531. doi:10.1519/JSC.0000000000003176',
+  PFITZINGER: 'Pfitzinger P, Douglas S. Advanced Marathoning, 3rd ed. Human Kinetics, 2019. (long and medium-long runs, marathon-pace runs, recovery weeks)',
+  FRANDSEN2025: 'Frandsen JSB, Hulme A, Parner ET, et al. How much running is too much? Identifying high-risk running sessions in a 5200-person cohort study. Br J Sports Med 2025;59:1203–1210. doi:10.1136/bjsports-2024-109380',
+  NIELSEN2014: 'Nielsen RO, et al. Excessive progression in weekly running distance and risk of running-related injuries: an association which varies according to type of injury. J Orthop Sports Phys Ther 2014;44:739–747.',
+  BUIST2008: 'Buist I, et al. No effect of a graded training program on the number of running-related injuries in novice runners: a randomized controlled trial. Am J Sports Med 2008;36:33–39.',
+  GABBETT2016: 'Gabbett TJ. The training–injury prevention paradox: should athletes be training smarter and harder? Br J Sports Med 2016;50:273–280.',
+  IMPELLIZZERI2020: 'Impellizzeri FM, et al. Acute:chronic workload ratio: conceptual issues and fundamental pitfalls. Int J Sports Physiol Perform 2020;15:907–913.',
+  BOSQUET2007: 'Bosquet L, Montpetit J, Arvisais D, Mujika I. Effects of tapering on performance: a meta-analysis. Med Sci Sports Exerc 2007;39:1358–1365.',
+  BUCHHEIT2014: 'Buchheit M. Monitoring training status with HR measures: do all roads lead to Rome? Front Physiol 2014;5:73.',
+  VANPOPPEL2021: 'van Poppel D, van der Worp M, Slabbekoorn A, et al. Risk factors for overuse injuries in short- and long-distance running: a systematic review. J Sport Health Sci 2021;10:14–28. doi:10.1016/j.jshs.2020.06.006',
+  MUJIKA2000: 'Mujika I, Padilla S. Detraining: loss of training-induced physiological and performance adaptations. Part I and Part II. Sports Med 2000;30:79–87 and 145–154.',
+  COYLE1984: 'Coyle EF, Martin WH, Bloomfield SA, Lowry OH, Holloszy JO. Time course of loss of adaptations after stopping prolonged intense endurance training. J Appl Physiol 1984;57:1857–1864.',
+  BLAGROVE2018: 'Blagrove RC, Howatson G, Hayes PR. Effects of strength training on the physiological determinants of middle- and long-distance running performance: a systematic review. Sports Med 2018;48:1117–1149.',
+};
+const PLAN_SRC_KEYS = Object.keys(PLAN_SRC);
+const cite = keys => keys.map(k => `<sup><a href="#psrc-${k}">[${PLAN_SRC_KEYS.indexOf(k) + 1}]</a></sup>`).join('');
+
+const GOALS = {
+  '5k':       {name: '5 km',          m: 5000,    minW: 6,  longCap: 14, minPeak: 25, maxShare: .35, taper: [.6],      peak: 3, build: 4},
+  '10k':      {name: '10 km',         m: 10000,   minW: 6,  longCap: 18, minPeak: 30, maxShare: .35, taper: [.6],      peak: 3, build: 4},
+  'half':     {name: 'Half marathon', m: 21097.5, minW: 8,  longCap: 22, minPeak: 35, maxShare: .40, taper: [.8, .55], peak: 3, build: 5},
+  'marathon': {name: 'Marathon',      m: 42195,   minW: 12, longCap: 32, minPeak: 50, maxShare: .50, taper: [.7, .5],  peak: 4, build: 6},
+};
+const GOAL_KM = {'5k': 5, '10k': 10, '10mi': 16.0934, 'half': 21.0975, 'marathon': 42.195};
+function goalSpec(g){
+  const km = g.dist === 'custom' ? +g.km : GOAL_KM[g.dist];
+  const base = GOALS[g.dist];
+  const name = base ? base.name : g.dist === '10mi' ? '10 miles' : `${fmtNum(km, km % 1 ? 1 : 0)} km race`;
+  let G;
+  if (base) G = {...base};
+  else {
+    const A = Object.values(GOALS).sort((a, b) => a.m - b.m), m = km * 1000;
+    let i = A.findIndex(x => x.m >= m); if (i < 1) i = i === 0 ? 1 : A.length - 1;
+    const a = A[i - 1], b = A[i], f = Math.min(1, Math.max(0, (m - a.m) / (b.m - a.m)));
+    const lerp = k => a[k] + (b[k] - a[k]) * f;
+    G = {m, minW: Math.round(lerp('minW')), longCap: Math.round(lerp('longCap')), minPeak: Math.round(lerp('minPeak')), maxShare: lerp('maxShare'),
+      taper: km <= 12 ? [.6] : km <= 30 ? [.8, .55] : [.7, .5], peak: Math.round(lerp('peak')), build: Math.round(lerp('build'))};
+  }
+  return {...G, name, km, long: km >= 15, mara: km >= 30, ultra: km > 42.2};
+}
+const WEEKDAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+// training days for n days a week with the long run on Sunday (0 = Monday); shifted for another long-run day
+const DAY_SETS = {3: [1, 3, 6], 4: [1, 2, 4, 6], 5: [0, 1, 3, 4, 6], 6: [0, 1, 2, 3, 4, 6]};
+let PLAN = null;           // {goal: {dist, date, time, days, longDay}, created, lastAct, lastSig, lastV, lastLevel, log: []}
+const r05 = x => Math.max(0, Math.round(x * 2) / 2);
+const ymdDate = t => { const [y, m, d] = t.split('-').map(Number); return new Date(y, m - 1, d); };
+const fmtDay = d => d.toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'short'});
+const weekNo = (a, b) => Math.round((monday(b) - monday(a)) / (7 * DAY));   // rounding absorbs daylight saving time
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);   // calendar days, DST-safe
+
+function planMetrics(asOf){   // running before asOf (exclusive)
+  const runs = ALL.filter(s => isRunSport(s.sport) && s.date < asOf);
+  const span = (d0, d1) => runs.filter(r => r.date >= asOf - d1 * DAY && r.date < asOf - d0 * DAY);
+  const km = list => list.reduce((a, r) => a + r.km, 0);
+  const vs = span(0, 120).map(runVdot).filter(Boolean);
+  const ef = r => r.deep?.ef || (r.hrAvg && okPace(r) && r.km >= 3 ? (r.km * 1000 / r.sec * 60) / r.hrAvg : null);
+  const last = runs[runs.length - 1];
+  // longer history (2 years): the best 8-week block you sustained, how regularly you ran, your best fitness then
+  const hist = span(0, 730), wk = new Map(), months = new Map();
+  const curM = asOf.getFullYear() * 12 + asOf.getMonth();
+  hist.forEach(r => { const k = ymdStr(monday(r.date)); wk.set(k, (wk.get(k) || 0) + r.km);
+    const mk = r.date.getFullYear() * 12 + r.date.getMonth(); if (mk > curM - 24) months.set(mk, (months.get(mk) || 0) + 1); });
+  const mons = [];   // Mondays by calendar date (not by milliseconds: daylight saving time shifts those)
+  for (let d = monday(new Date(asOf - 730 * DAY)); d <= asOf; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7)) mons.push(d);
+  let block = 0, blockEnd = null;
+  for (let i = 7; i < mons.length; i++){
+    let sum = 0; for (let j = 0; j < 8; j++) sum += wk.get(ymdStr(mons[i - j])) || 0;
+    if (sum / 8 > block){ block = sum / 8; blockEnd = new Date(mons[i].getFullYear(), mons[i].getMonth(), mons[i].getDate() + 6); }
+  }
+  const hv = hist.map(r => [runVdot(r), r]).filter(x => x[0]).sort((a, b) => b[0] - a[0])[0];
+  const activeMonths = [...months.values()].filter(n => n >= 4).length;
+  return {block, blockEnd, activeMonths, experienced: activeMonths >= 12 && block > 0, histV: hv ? hv[0] : null, histVDate: hv ? hv[1].date : null,
+    chronic: km(span(0, 28)) / 4, acute: km(span(0, 7)), longest30: Math.max(0, ...span(0, 30).map(r => r.km)),
+    V: vs.length ? Math.max(...vs) : null, effNow: median(span(0, 14).map(ef).filter(Boolean)), effBase: median(span(14, 70).map(ef).filter(Boolean)),
+    nEff: span(0, 14).filter(ef).length, daysSince: last ? (asOf - last.date) / DAY : null, last};
+}
+const paceAt = (V, f) => 60000 / velAtVO2(V * f);        // s/km at a fraction of VDOT (Daniels)
+function planPaces(V){
+  if (!V) return null;
+  return {E: [paceAt(V, .70), paceAt(V, .62)], M: paceAt(V, .80), T: paceAt(V, .88), I: paceAt(V, .975)};
+}
+
+// what you entered yourself counts for the period it describes, and only where your activities show less
+function selfReport(m, at){
+  const s = PLAN.goal.self, age = (at - new Date(PLAN.created)) / DAY;
+  if (!s) return;
+  if (s.km && age < 28 && s.km > m.chronic){ m.chronic = s.km; m.self = true; }
+  if (s.long && age < 30 && s.long > m.longest30){ m.longest30 = s.long; m.self = true; }
+  if (s.m && s.sec && age < 120){ const v = vdot(s.m, s.sec); if (!m.V || v > m.V){ m.V = v; m.self = m.selfV = true; } }
+}
+
+function buildPlan(now){
+  const g = PLAN.goal, G = goalSpec(g), today = dayStart(now), race = ymdDate(g.date);
+  const wk0 = monday(today), raceWk = monday(race), created = new Date(PLAN.created);
+  const nWeeks = weekNo(today, race) + 1;
+  const mWeek = planMetrics(wk0), mNow = planMetrics(new Date(today.getTime() + DAY));
+  selfReport(mWeek, wk0); selfReport(mNow, today);
+  // no recent fitness estimate: fall back on the best of the last 2 years minus ~7% for detraining
+  if (!mNow.V && mNow.histV){ mNow.V = mNow.histV * .93; mNow.vEstimated = true; }
+  const pc = planPaces(mNow.V);
+  const target = g.time ? parseDur(g.time) : null;
+  // VDOT predictions are only valid up to the marathon
+  const goalPace = target ? target / (G.m / 1000) : mNow.V && !G.ultra ? predictTime(mNow.V, G.m) / (G.m / 1000) : null;
+  const reasons = [], status = [];
+  const out = {G, g, today, race, nWeeks, m: mNow, mWeek, pc, target, goalPace, weeks: [], reasons, status};
+  if (race < today){ status.push({lvl: 'info', t: 'Race day has passed', x: 'Set a new goal to get a new plan.', src: []}); return out; }
+
+  // flags from the most recent days (they change the rest of this week)
+  const acwr = mNow.chronic > 0 ? mNow.acute / mNow.chronic : null;
+  const spike = acwr != null && acwr > 1.3 && mNow.acute > 15;
+  const fatigue = mNow.effNow && mNow.effBase && mNow.nEff >= 2 && mNow.effNow < mNow.effBase * 0.95;
+  const restart = mNow.daysSince != null && mNow.daysSince >= 14;
+  if (spike) reasons.push({t: `Load spike: ${fmtNum(mNow.acute, 1)} km in the last 7 days is ${fmtNum(acwr, 1)}× your 4-week average. The rest of this week is easy and the long run does not grow.`, src: ['GABBETT2016', 'IMPELLIZZERI2020']});
+  if (fatigue) reasons.push({t: `Fatigue signal: your metres per heartbeat in the last 2 weeks are ${fmtNum((1 - mNow.effNow / mNow.effBase) * 100, 0)}% lower than in the 8 weeks before (fatigue, heat or illness). Hard sessions this week become easy runs.`, src: ['BUCHHEIT2014']});
+  if (restart) reasons.push({t: `${Math.round(mNow.daysSince)} days without running: this week is easy only, and the volume starts from what you ran recently.`, src: ['NIELSEN2014']});
+  if (PLAN.lastV && mNow.V && Math.abs(mNow.V - PLAN.lastV) >= 0.5)
+    reasons.push({t: `Fitness estimate ${mNow.V > PLAN.lastV ? 'up' : 'down'} from VDOT ${fmtNum(PLAN.lastV, 1)} to ${fmtNum(mNow.V, 1)}: training paces follow.`, src: ['DANIELS']});
+
+  // weekly distance and long run per week
+  const taperN = G.taper.length;
+  let prev = Math.max(10, mWeek.chronic), longPrev = Math.max(mWeek.longest30, mWeek.chronic * .3, 5);
+  // experienced runners (running in ≥ 12 of the last 24 months) may aim for the volume they sustained before and
+  // rebuild to it a bit faster (15% instead of 10% a week); the long run keeps the strict 30-day rule
+  const exp = mWeek.experienced, block = mWeek.block;
+  const peakT = Math.max(G.minPeak, mWeek.chronic * 1.1, Math.min(mWeek.chronic * 1.3, G.minPeak * 1.4), exp ? Math.min(block, G.minPeak * 1.6) : 0);
+  const grow = W => exp && W < block * .9 ? 1.15 : 1.1;
+  let peakW = 0, peakLong = 0;
+  for (let i = 0; i < nWeeks; i++){
+    const start = addDays(wk0, i * 7), toRace = nWeeks - 1 - i, abs = weekNo(created, start);
+    const phase = toRace < taperN ? 'Taper' : toRace < taperN + G.peak ? 'Peak' : toRace < taperN + G.peak + G.build ? 'Build' : 'Base';
+    const recovery = phase !== 'Taper' && abs > 0 && abs % 4 === 3 && toRace > taperN;
+    let W, long;
+    if (phase === 'Taper'){ W = (peakW || prev) * G.taper[taperN - 1 - toRace]; long = toRace === 0 ? 0 : (peakLong || longPrev) * .65; }
+    else {
+      const cap = G.longCap * (phase === 'Base' ? .8 : phase === 'Build' ? .9 : 1);   // the long run peaks in the peak phase
+      const fit = l => l * (1 + .75 * (g.days - 1));   // most a week can hold: other runs at most 3/4 of the long run
+      if (recovery){ long = Math.min(cap, longPrev) * .75; W = Math.min(prev * .75, fit(long)); }
+      else {
+        W = i === 0 && (spike || restart) ? Math.min(prev, Math.max(10, mWeek.chronic)) : Math.min(Math.max(peakT, prev), prev * grow(prev));
+        long = Math.min(cap, i === 0 && (spike || restart) ? longPrev : longPrev * 1.1, Math.max(W * G.maxShare, longPrev));   // never shrinks, ≤ +10%
+        W = Math.min(W, fit(long));
+        prev = W; longPrev = Math.max(longPrev, long); peakW = Math.max(peakW, W); peakLong = Math.max(peakLong, long);
+      }
+    }
+    out.weeks.push({i, start, phase, recovery, W: r05(W), long: r05(long), toRace});
+  }
+
+  // feasibility
+  const weeksLeft = weekNo(today, race);
+  if (weeksLeft < G.minW)
+    status.push({lvl: 'bad', t: 'Too little time', x: `A ${G.name.toLowerCase()} needs at least ${G.minW} weeks of specific preparation; you have ${weeksLeft}. Choose a later race or a shorter distance.`, src: ['PFITZINGER', 'DANIELS']});
+  if (peakW < G.minPeak * .8)
+    status.push({lvl: 'bad', t: 'Weekly distance cannot grow enough', x: `From ${fmtNum(mWeek.chronic, 0)} km/week now, a safe increase of at most ~10% per week reaches ${fmtNum(peakW, 0)} km before the taper; about ${G.minPeak} km/week is a sensible minimum for this distance.`, src: ['NIELSEN2014', 'BUIST2008']});
+  else if (peakW < G.minPeak)
+    status.push({lvl: 'warn', t: 'Weekly distance on the low side', x: `The plan peaks at ${fmtNum(peakW, 0)} km/week; ${G.minPeak} km/week would be better for this distance.`, src: ['PFITZINGER']});
+  if (peakLong < G.longCap * .75)
+    status.push({lvl: 'bad', t: 'Long run cannot grow enough', x: `Growing at most 10% beyond your longest run of the last 30 days (${fmtNum(mWeek.longest30, 1)} km), the long run reaches ${fmtNum(peakLong, 0)} km; about ${G.longCap} km is the target for this distance.`, src: ['FRANDSEN2025', 'PFITZINGER']});
+  else if (peakLong < G.longCap * .9)
+    status.push({lvl: 'warn', t: 'Long run on the short side', x: `The longest run in the plan is ${fmtNum(peakLong, 0)} km (target about ${G.longCap} km).`, src: ['FRANDSEN2025', 'PFITZINGER']});
+  if (target && mNow.V && !G.ultra){
+    // ~1 VDOT per 4–6 weeks of consistent training at best; regaining a level reached in the last 2 years goes faster
+    const regain = mNow.histV && mNow.histV > mNow.V ? Math.min(mNow.histV - mNow.V, weeksLeft / 3) : 0;
+    const need = vdot(G.m, target), gain = Math.min(6, Math.max(weeksLeft / 5, regain));
+    const now = predictTime(mNow.V, G.m), best = predictTime(mNow.V + gain, G.m);
+    if (need > mNow.V + gain)
+      status.push({lvl: 'bad', t: 'Target time not realistic', x: `${fmtTime(target)} needs VDOT ${fmtNum(need, 1)}; you are at ${fmtNum(mNow.V, 1)} (prediction now ${fmtTime(now)}). With good training until race day about ${fmtTime(best)} is realistic.`, src: ['DANIELS']});
+    else if (need > mNow.V + gain / 2)
+      status.push({lvl: 'warn', t: 'Ambitious target time', x: `${fmtTime(target)} needs VDOT ${fmtNum(need, 1)}; you are at ${fmtNum(mNow.V, 1)} (prediction now ${fmtTime(now)}). Possible if training goes well.`, src: ['DANIELS']});
+  } else if (target) status.push({lvl: 'info', t: 'Target time not checked', x: G.ultra ? 'Predictions from shorter runs are not reliable beyond the marathon.' : 'No run of 3 km or more in the last 120 days to estimate your fitness from.', src: ['DANIELS']});
+  if (G.ultra) status.push({lvl: 'warn', t: 'Longer than a marathon', x: 'The plan treats this distance like a marathon. Ultra-specific training (back-to-back long runs, time on feet, hiking, fuelling) is not included.', src: ['PFITZINGER']});
+  if (G.mara && mNow.V && peakW < 60)
+    status.push({lvl: 'info', t: 'Prediction for long races', x: `Predictions from shorter runs assume enough endurance; below about 60 km/week a race of ${fmtNum(G.km, 0)} km or more is often a few minutes slower than predicted.`, src: ['DANIELS', 'PFITZINGER']});
+
+  // sessions
+  const days = DAY_SETS[g.days].map(d => (d + g.longDay - 6 + 14) % 7);
+  const longD = g.longDay;
+  for (const w of out.weeks){
+    w.sessions = planWeekSessions(w, days, longD, G, g, pc, goalPace, {easyOnly: w.i === 0 && (spike || fatigue || restart)});
+    w.sessions = w.sessions.filter(x => x.date <= race);
+    if (w.toRace === 0){
+      w.sessions = w.sessions.filter(x => +x.date !== +race);
+      w.sessions.push(sess('race', race, 0, G, pc, goalPace, {}));
+      w.sessions.sort((a, b) => a.date - b.date);
+    }
+  }
+  adaptCurrentWeek(out, now);
+  return out;
+}
+
+function planWeekSessions(w, days, longD, G, g, pc, goalPace, o){
+  const date = d => addDays(w.start, (d + 7) % 7);
+  const isLongDist = G.long;
+  const others = days.filter(d => d !== longD);
+  // the two quality days: the first training day and the one about midweek, never the day before the long run
+  const q1 = others[0], q2 = others.length >= 3 ? others[Math.floor(others.length / 2)] : null;
+  const ph = w.phase, easyOnly = o.easyOnly;
+  let t1, t2;
+  if (w.recovery){ t1 = 'strides'; t2 = 'easy'; }
+  else if (ph === 'Base'){ t1 = 'strides'; t2 = g.days >= 5 ? 'strides' : 'easy'; }
+  else if (ph === 'Build'){ t1 = 'threshold'; t2 = G.mara ? 'medium' : isLongDist ? 'threshold' : 'intervals'; }
+  else if (ph === 'Peak'){ t1 = isLongDist ? 'threshold' : 'intervals'; t2 = G.mara ? 'medium' : 'racepace'; }
+  else { t1 = isLongDist ? 'threshold' : 'intervals'; t2 = 'easy'; }
+  if (g.days === 3 && ph !== 'Taper') t2 = null;
+  if (w.W < 25){ t1 = 'strides'; if (t2) t2 = 'easy'; }   // build an easy base first (Daniels: quality only on a base of easy running)
+  if (easyOnly){ t1 = 'easy'; if (t2) t2 = 'easy'; }
+  let tl = 'long';
+  if (w.W >= 25 && !w.recovery && !easyOnly && G.mara && (ph === 'Peak' || (ph === 'Build' && w.i % 2 === 0))) tl = 'longM';
+  if (w.W >= 25 && !w.recovery && !easyOnly && !G.mara && ph === 'Peak' && w.i % 2 === 0) tl = 'longFast';
+  const taperFactor = ph === 'Taper' ? .5 : 1;
+  const list = [];
+  if (w.long > 0) list.push(sess(tl, date(longD), w.long, G, pc, goalPace, {W: w.W}));
+  for (const d of others){
+    const type = d === q1 ? t1 : d === q2 && t2 ? t2 : 'easy';
+    list.push(sess(type, date(d), null, G, pc, goalPace, {W: w.W, f: taperFactor}));
+  }
+  // easy-type sessions share what is left of the weekly distance
+  const fixed = list.filter(x => x.km != null).reduce((a, x) => a + x.km, 0);
+  const fill = list.filter(x => x.km == null), weight = x => x.type === 'medium' ? 1.6 : 1;
+  const totW = fill.reduce((a, x) => a + weight(x), 0);
+  const rest = Math.max(0, w.W - fixed);
+  // an easy run never longer than ~3/4 of the long run: with few days a week the weekly distance is capped instead
+  const longKm = w.long || Math.max(...list.filter(x => x.km != null).map(x => x.km), 8);
+  fill.forEach(x => { x.km = r05(Math.min(longKm * .75 * weight(x), Math.max(3, rest * weight(x) / (totW || 1)))); describe(x, G, pc, goalPace); });
+  w.W = r05(list.reduce((a, x) => a + x.km, 0));
+  return list.sort((a, b) => a.date - b.date);
+}
+
+// one session: km null = filled in later from the weekly distance
+function sess(type, date, km, G, pc, goalPace, o){
+  const x = {type, date, km, o};
+  const W = o.W || 30, f = o.f || 1;
+  x.wu = W < 35 ? 2 : 4;   // warm-up + cool-down km: shorter in low-volume weeks
+  if (type === 'threshold'){ x.reps = Math.max(2, Math.round(Math.min(10, Math.max(3, W * .1)) * f / 1.6)); x.km = r05(x.reps * 1.6 + x.wu + x.reps * .2); }
+  if (type === 'intervals'){ x.reps = Math.max(2, Math.round(Math.min(8, Math.max(3, W * .08)) * f)); x.km = r05(x.reps + x.wu + x.reps * .5); }
+  if (type === 'racepace'){
+    x.rep = G.m <= 5000 ? .8 : G.m <= 10000 ? 1 : 3;
+    x.reps = Math.max(2, Math.round(Math.min(G.m <= 10000 ? 6 : 9, W * .1) * f / x.rep));
+    x.km = r05(x.reps * x.rep + x.wu + x.reps * .3);
+  }
+  if (type === 'longM') x.mkm = r05(Math.min(18, (o.W || 30) * .2, km * .6));
+  if (type === 'longFast') x.fkm = r05(Math.min(5, km * .25));
+  if (x.km != null || type === 'race') describe(x, G, pc, goalPace);
+  return x;
+}
+
+function describe(x, G, pc, goalPace){
+  const p = v => pc ? fmtPace(v) + '/km' : '';
+  const E = pc ? `${fmtPace(pc.E[0])}–${fmtPace(pc.E[1])}/km` : 'conversational pace';
+  const easyHr = `heart rate below ${P.aet} bpm`;
+  const T = {
+    easy: ['Easy run', `${x.km} km easy at ${E}, ${easyHr}.`,
+      'Most of your running (about 80% of the time) should be easy, below the aerobic threshold. It builds the aerobic base – capillaries, mitochondria, fat burning – with little fatigue, so the hard sessions can be done well. Successful endurance athletes train this way rather than with lots of moderate "grey zone" running.',
+      ['SEILER2006', 'STOGGL2014', 'CASADO2021'], ''],
+    strides: ['Easy run + strides', `${x.km} km easy at ${E}, then 6–8 × 20 s strides: fast but relaxed, walk back between them.`,
+      'Short strides keep leg speed and running economy without measurable fatigue, so they fit in the base phase and in lighter weeks. Optional on this day or after another easy run: 20–30 min strength training (squats, lunges, calf raises, hops), which improves running economy.',
+      ['DANIELS', 'BLAGROVE2018'], ''],
+    medium: ['Medium-long run', `${x.km} km easy at ${E}, ${easyHr}.`,
+      'A second, medium-long run in the week adds aerobic volume and endurance for the marathon without the recovery cost of a second long run.',
+      ['PFITZINGER', 'SEILER2006'], ''],
+    threshold: ['Threshold intervals', `${x.wu / 2} km warm-up, ${x.reps} × 1.6 km at T pace ${p(pc?.T)} (comfortably hard, heart rate around ${P.ant} bpm) with 1 min jog, ${x.wu / 2} km cool-down.`,
+      'Threshold pace is about the effort you can keep up for an hour. Training there raises the speed you can hold before lactate accumulates. Splitting it into "cruise intervals" with short rests gives more time at this intensity with less strain. Daniels limits threshold running to about 10% of the weekly distance.',
+      ['DANIELS', 'CASADO2021'], 'q'],
+    intervals: ['Intervals', `${x.wu / 2} km warm-up, ${x.reps} × 1 km at I pace ${p(pc?.I)} with 2–3 min easy jog, ${x.wu / 2} km cool-down.`,
+      'Repetitions of 3–5 minutes at about VO₂max pace raise your aerobic ceiling. In a polarised plan they are a small part of the week (Daniels: at most ~8% of the weekly distance, 10 km per session), next to a large volume of easy running.',
+      ['DANIELS', 'STOGGL2014', 'SEILER2006'], 'q'],
+    racepace: ['Race-pace repetitions', `${x.wu / 2} km warm-up, ${x.reps} × ${x.rep >= 1 ? x.rep + ' km' : x.rep * 1000 + ' m'} at goal pace ${goalPace ? fmtPace(goalPace) + '/km' : ''} with ${x.rep >= 3 ? '2 min' : '1 min'} jog, ${x.wu / 2} km cool-down.`,
+      'Close to the race, training becomes more specific: running at goal pace teaches rhythm, economy and pacing at exactly the speed you need on race day.',
+      ['DANIELS'], 'q'],
+    long: ['Long run', `${x.km} km easy at ${E}, ${easyHr}.`,
+      'The long run is the key endurance session: it increases glycogen storage, fat use and the resilience of muscles, tendons and bones. It grows by at most 10% beyond your longest run of the last 30 days, because single runs longer than that were linked to a higher injury risk in a cohort of 5,200 runners.',
+      ['PFITZINGER', 'FRANDSEN2025'], ''],
+    longM: ['Long run with marathon pace', `${x.km} km, of which the last ${x.mkm} km at marathon pace ${p(pc?.M)}; the rest easy at ${E}.`,
+      'Running a block at marathon pace late in a long run practises race pace on tired legs, and is the moment to practise drinking and gels. Daniels limits marathon-pace running to about 20% of the weekly distance. The pace is based on your current fitness, not your target: train at the level you are at.',
+      ['DANIELS', 'PFITZINGER'], 'q'],
+    longFast: ['Long run with fast finish', `${x.km} km easy at ${E}; the last ${x.fkm} km at T pace ${p(pc?.T)}.`,
+      'Finishing a long run at threshold pace adds race-specific fatigue resistance for the half marathon and 10 km without a separate hard day.',
+      ['DANIELS', 'PFITZINGER'], 'q'],
+    race: [`Race: ${G.name}`, goalPace ? `Goal pace ${fmtPace(goalPace)}/km (finish ${fmtTime(goalPace * G.m / 1000)}). Start the first kilometres slightly slower, then run evenly.` : 'Start the first kilometres slightly slower, then run evenly.',
+      'Even pacing is the most economical way to race distances from 5 km up; a too-fast start costs more later than it gains.',
+      ['DANIELS'], 'r'],
+  }[x.type];
+  [x.title, x.detail, x.why, x.src, x.cls] = T;
+}
+
+// this week: past days get done / missed, the remaining sessions share what is left of the weekly distance
+function adaptCurrentWeek(out, now){
+  const w = out.weeks[0]; if (!w) return;
+  const today = dayStart(now), end = addDays(w.start, 7);
+  const runs = ALL.filter(s => isRunSport(s.sport) && s.date >= w.start && s.date < end);
+  const onDay = d => runs.filter(r => +dayStart(r.date) === +d);
+  const from = dayStart(new Date(PLAN.created));
+  w.sessions = w.sessions.filter(x => x.date >= from || onDay(x.date).length);   // no 'missed' before the plan existed
+  const done = runs.reduce((a, r) => a + r.km, 0);
+  let missed = 0;
+  for (const x of w.sessions){
+    const rs = onDay(x.date), km = rs.reduce((a, r) => a + r.km, 0);
+    if (rs.length){ x.done = km; continue; }
+    if (x.date < today){ x.missed = true; missed++; }
+  }
+  w.doneKm = done;
+  const todo = w.sessions.filter(x => !x.done && !x.missed && x.type !== 'race');
+  const left = Math.max(0, w.W - done), planned = todo.reduce((a, x) => a + x.km, 0);
+  if (planned > left + 1){
+    const flex = todo.filter(x => ['easy', 'strides', 'medium'].includes(x.type));
+    const fixed = planned - flex.reduce((a, x) => a + x.km, 0), room = Math.max(0, left - fixed);
+    const f = flex.length ? room / flex.reduce((a, x) => a + x.km, 0) : 1;
+    flex.forEach(x => { x.km = r05(x.km * f); if (x.km < 3){ x.rest = true; x.km = 0; } else describe(x, out.G, out.pc, out.goalPace); });
+    if (flex.length) out.reasons.push({t: `You already ran ${fmtNum(done, 1)} of the ${w.W} km planned this week: the remaining easy runs are shorter.`, src: ['NIELSEN2014']});
+  }
+  if (missed) out.reasons.push({t: `${missed} session${missed > 1 ? 's' : ''} missed this week. They are not made up: squeezing them into the remaining days would raise the load too quickly.`, src: ['DANIELS', 'GABBETT2016']});
+}
+
+const PLAN_LVL = {ok: 0, info: 0, warn: 1, bad: 2};
+let PLAN_OUT = null;
+function renderPlan(){
+  const has = !!PLAN?.goal;
+  $('#planForm').classList.toggle('hidden', has && !PLAN_EDIT);
+  $('#planBody').classList.toggle('hidden', !has);
+  if (!has){ $('#planGoalSummary').innerHTML = '<p class="hint" style="margin:0">No goal yet.</p>'; PLAN_OUT = null; return; }
+  const o = PLAN_OUT = buildPlan(new Date()), g = PLAN.goal;
+  $('#planGoalSummary').innerHTML = `<div class="row" style="justify-content:space-between"><p style="margin:0"><b>${o.G.name}</b> on ${o.race.toLocaleDateString('en-GB', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'})}` +
+    ` · ${Math.max(0, Math.ceil((o.race - o.today) / DAY))} days to go${g.time ? ` · target ${escH(g.time)}` : ''} · ${g.days} days a week, long run on ${WEEKDAYS[g.longDay]}</p>` +
+    `<div class="row"><button class="small" id="pgEdit">Change goal</button><button class="small danger" id="pgDel">Delete</button></div></div>`;
+  $('#pgEdit').onclick = () => { PLAN_EDIT = true; fillPlanForm(); renderPlan(); };
+  $('#pgDel').onclick = () => { if (!confirm('Delete this goal and its plan?')) return; PLAN = null; PLAN_EDIT = false; saveStore(); renderPlan(); };
+
+  // status
+  const worst = o.status.reduce((a, x) => Math.max(a, PLAN_LVL[x.lvl]), 0);
+  const head = worst === 2 ? ['bad', 'Goal not feasible as planned'] : worst === 1 ? ['warn', 'Goal feasible, with caveats'] : ['good', 'Goal feasible'];
+  $('#planStatus').innerHTML = `<div class="adv ${head[0]}" style="margin:14px 0"><b>${head[1]}</b>` +
+    (o.status.length ? o.status.map(x => `<div style="margin-top:6px"><b>${x.t}.</b> ${x.x}${cite(x.src)}</div>`).join('') :
+      `<div style="margin-top:4px">Weekly distance and long run can grow safely to what this distance needs${o.target ? ', and the target time fits your current fitness' : ''}.</div>`) + '</div>';
+  o.level = worst;
+
+  // fitness
+  const m = o.m;
+  $('#planKpis').innerHTML = [
+    [m.V ? fmtNum(m.V, 1) : '–', m.selfV ? 'VDOT (from your race time)' : m.vEstimated ? 'VDOT (estimate from older runs)' : 'VDOT (best of 120 days)'],
+    [fmtNum(m.chronic, 1), 'km/week (last 4 weeks)'],
+    [fmtNum(m.longest30, 1), 'longest run, 30 days'],
+    [m.V && !o.G.ultra ? fmtTime(predictTime(m.V, o.G.m)) : '–', o.G.ultra ? 'no prediction beyond the marathon' : `predicted ${o.G.name.toLowerCase()} now`],
+    [fmtNum(o.mWeek.block, 1), 'km/week, best 8 weeks (2 years)'],
+  ].map(([b, t]) => `<div class="kpi"><b>${b}</b><small>${t}</small></div>`).join('');
+  const h = o.mWeek;
+  $('#planHistory').innerHTML = (m.self || h.self ? 'Partly based on what you entered yourself; your real activities take over as they come in. ' : '') + (h.experienced
+    ? `Your history: you ran in ${h.activeMonths} of the last 24 months and sustained ${fmtNum(h.block, 0)} km/week over 8 weeks (until ${fmtDate(h.blockEnd)}). ` +
+      `Experienced runners get injured less often than beginners${cite(['VANPOPPEL2021'])}, and part of the fitness built over years remains after a quieter period${cite(['MUJIKA2000', 'COYLE1984'])}. ` +
+      `So the plan may aim for that volume and, while below it, rebuild by up to 15% instead of 10% a week; the long run still follows only your last 30 days${cite(['FRANDSEN2025'])}. ` +
+      `Faster regaining is a rule of thumb: studies on retraining in people are few.` +
+      (m.histV && m.histV > m.V + .5 ? ` Your best fitness in the last 2 years was VDOT ${fmtNum(m.histV, 1)} (${fmtDate(m.histVDate)}); getting back towards it counts as realistic when judging a target time.` : '') +
+      (m.vEstimated ? ` No run of 3 km or more in the last 120 days: paces are estimated from older runs minus about 7% for fitness lost${cite(['COYLE1984'])}.` : '')
+    : h.activeMonths ? `Your history: you ran in ${h.activeMonths} of the last 24 months, so the plan builds up from your recent weeks only, by at most 10% a week${cite(['VANPOPPEL2021', 'NIELSEN2014'])}.`
+    : `No running history in your data yet, so the plan starts carefully and builds up by at most 10% a week; beginners get injured more often than experienced runners${cite(['VANPOPPEL2021', 'NIELSEN2014'])}. Below 25 km a week there are no hard sessions yet, only easy running and strides${cite(['DANIELS', 'SEILER2006'])}.`);
+
+  // weeks
+  $('#planWeeksHint').innerHTML = `Weekly distance grows about 10% per week from what you actually ran, with a lighter week every fourth week${cite(['NIELSEN2014', 'BUIST2008', 'PFITZINGER'])}; the evidence for weekly limits is weak, a large cohort linked injuries to single runs that are much longer than usual rather than to week-to-week changes, so the long run is limited more strictly${cite(['FRANDSEN2025'])}. ` +
+    `Phases: base (easy volume and strides), build (threshold), peak (race-specific) and taper (less volume, same intensity${cite(['BOSQUET2007'])}). About 80% of the running is easy${cite(['SEILER2006'])}.`;
+  const tag = x => x.cls === 'q' ? '<span class="tag q">hard</span>' : x.cls === 'r' ? '<span class="tag r">race</span>' : '';
+  const today = dayStart(new Date());
+  $('#planWeeks').innerHTML = o.weeks.map(w => {
+    const end = new Date(w.start.getTime() + 6 * DAY);
+    const sum = `Week of ${w.start.toLocaleDateString('en-GB', {day: 'numeric', month: 'short'})} – ${w.phase}${w.recovery ? ' (lighter week)' : ''} <small>· ${w.W} km` +
+      `${w.long ? ` · long run ${w.long} km` : ''}${w.doneKm != null ? ` · done ${fmtNum(w.doneKm, 1)} km` : ''}${w.toRace === 0 ? ' · race week' : ''}</small>`;
+    const note = w.recovery ? `<p class="hint" style="margin:6px 0">A lighter week (~25% less) lets the training of the last weeks sink in before the load grows again${cite(['PFITZINGER', 'GABBETT2016'])}.</p>`
+      : w.phase === 'Taper' ? `<p class="hint" style="margin:6px 0">Taper: volume down 40–60% over the last ${o.G.taper.length * 7} days while intensity and frequency stay, the approach with the largest performance gain in a meta-analysis${cite(['BOSQUET2007'])}.</p>` : '';
+    const rows = w.sessions.map(x => {
+      const cls = x.done != null ? 'done' : x.missed ? 'missed' : +x.date === +today ? 'today' : '';
+      const title = x.rest ? 'Rest (weekly distance reached)' : x.title;
+      const doneTxt = x.done != null ? ` <span class="hint">– done: ${fmtNum(x.done, 1)} km</span>` : x.missed ? ' <span class="hint">– missed</span>' : '';
+      return `<div class="psess ${cls}"><div class="pd">${fmtDay(x.date)}</div><div class="pt"><b>${title}</b>${x.rest ? '' : `${x.km ? ` · ${x.km} km` : ''}${tag(x)}`}${doneTxt}` +
+        (x.rest ? '' : `<div class="hint" style="font-size:13px;margin:2px 0 0">${x.detail}</div><details><summary>Why</summary><p>${x.why}${cite(x.src)}</p></details>`) + '</div></div>';
+    }).join('');
+    return `<details class="pweek${w.i === 0 ? ' now' : ''}"${w.i === 0 ? ' open' : ''}><summary>${sum}</summary>${note}${rows}</details>`;
+  }).join('');
+
+  // paces
+  if (o.pc){
+    $('#planPaceHint').innerHTML = `From your current VDOT ${fmtNum(m.V, 1)}; they change when your fitness does${cite(['DANIELS'])}.`;
+    $('#planPaces').innerHTML = `<table><tr><th>Pace</th><th>min/km</th><th>Use</th></tr>` +
+      `<tr><td>Easy (E)</td><td>${fmtPace(o.pc.E[0])} – ${fmtPace(o.pc.E[1])}</td><td>easy, medium-long and long runs</td></tr>` +
+      `<tr><td>Marathon (M)</td><td>${fmtPace(o.pc.M)}</td><td>marathon-pace blocks</td></tr>` +
+      `<tr><td>Threshold (T)</td><td>${fmtPace(o.pc.T)}</td><td>threshold intervals</td></tr>` +
+      `<tr><td>Interval (I)</td><td>${fmtPace(o.pc.I)}</td><td>intervals</td></tr>` +
+      (o.goalPace ? `<tr><td>Goal</td><td>${fmtPace(o.goalPace)}</td><td>race pace${o.target ? '' : ' (predicted)'}</td></tr>` : '') + '</table>';
+  } else { $('#planPaceHint').textContent = 'No run of 3 km or more in the last 120 days: run by feel and heart rate until there is one.'; $('#planPaces').innerHTML = ''; }
+  $('#planSources').innerHTML = PLAN_SRC_KEYS.map(k => `<li id="psrc-${k}">${escH(PLAN_SRC[k])}</li>`).join('');
+
+  // updates after a new activity
+  const newest = ALL.filter(s => isRunSport(s.sport)).slice(-1)[0] || ALL[ALL.length - 1];
+  const sig = JSON.stringify(o.weeks.slice(0, 2).flatMap(w => w.sessions).filter(x => x.date >= today).slice(0, 7).map(x => [ymdStr(x.date), x.type, x.km, !!x.rest]));
+  const actKey = newest ? sessionKey(newest) : null;
+  if (!isDemo && actKey && PLAN.lastAct !== actKey){
+    const first = PLAN.lastAct == null;
+    if (!first){
+      const items = o.reasons.map(r => r.t + cite(r.src));
+      if (PLAN.lastSig && PLAN.lastSig !== sig && !items.length) items.push('Upcoming sessions recalculated from your latest training.');
+      PLAN.log = [{date: Date.now(), act: `${sportLabel(newest.sport)} ${fmtNum(newest.km, 1)} km on ${fmtDate(newest.date)}`, items: items.length ? items : ['On track: no changes needed.']}, ...(PLAN.log || [])].slice(0, 20);
+      if (worst === 2 && (PLAN.lastLevel ?? 0) < 2)
+        setTimeout(() => alert(`Running plan: your ${o.G.name.toLowerCase()} goal is no longer feasible as planned.\n\n${o.status.filter(x => x.lvl === 'bad').map(x => x.t + ': ' + x.x).join('\n\n')}`), 300);
+    }
+    Object.assign(PLAN, {lastAct: actKey, lastSig: sig, lastV: m.V, lastLevel: worst});
+    saveStore();
+  }
+  const log = PLAN.log || [];
+  $('#planLog').innerHTML = (o.reasons.length ? `<div class="adv info" style="margin:0 0 10px"><b>Adjustments now</b>${o.reasons.map(r => `<div style="margin-top:4px">${r.t}${cite(r.src)}</div>`).join('')}</div>` : '') +
+    (log.length ? log.map(e => `<div style="padding:6px 0;border-bottom:1px solid var(--line)"><div class="hint" style="margin:0">${fmtDate(new Date(e.date))} – after ${escH(e.act)}</div>${e.items.map(t => `<div style="font-size:14px">${t}</div>`).join('')}</div>`).join('')
+      : '<p class="hint" style="margin:0">No updates yet: they appear here after your next activity.</p>');
+}
+
+let PLAN_EDIT = false;
+function fillPlanForm(){
+  const g = PLAN?.goal;
+  $('#pgDist').value = g?.dist || 'marathon';
+  $('#pgKm').value = g?.km || '';
+  $('#pgKmBox').classList.toggle('hidden', $('#pgDist').value !== 'custom');
+  $('#pgDate').value = g?.date || ymdStr(new Date(Date.now() + 16 * 7 * DAY));
+  $('#pgTime').value = g?.time || '';
+  $('#pgDays').value = String(g?.days || 4);
+  $('#pgLong').value = String(g?.longDay ?? 6);
+  $('#pgSelfKm').value = g?.self?.km || ''; $('#pgSelfLong').value = g?.self?.long || '';
+  $('#pgSelfRace').value = g?.self?.m ? String(g.self.m) : ''; $('#pgSelfTime').value = g?.self?.sec ? fmtTime(g.self.sec) : '';
+  $('#pgSelfBox').open = !!g?.self || !ALL.some(s => isRunSport(s.sport) && s.date > Date.now() - 28 * DAY);
+  $('#pgSave').textContent = g ? 'Save goal' : 'Create plan';
+  $('#pgCancel').classList.toggle('hidden', !g);
+}
+$('#planForm').onsubmit = e => {
+  e.preventDefault();
+  const time = $('#pgTime').value.trim();
+  if (time && !/^\d{1,2}:\d{2}(:\d{2})?$/.test(time)){ alert('Enter the target time as h:mm:ss (for example 3:45:00) or mm:ss.'); return; }
+  const isCustom = $('#pgDist').value === 'custom', ckm = +$('#pgKm').value;
+  if (isCustom && !(ckm >= 3 && ckm <= 100)){ alert('Enter a distance between 3 and 100 km.'); return; }
+  const short = ['5k', '10k'].includes($('#pgDist').value) || (isCustom && ckm < 15);   // 2 parts: mm:ss for 5/10 km, h:mm for longer races
+  const t = time && time.split(':').length === 2 ? (short ? '0:' + time : time + ':00') : time;
+  if (!$('#pgDate').value || ymdDate($('#pgDate').value) <= dayStart(new Date())){ alert('Choose a race date in the future.'); return; }
+  const rt = $('#pgSelfTime').value.trim(), rsec = rt ? parseDur(rt.split(':').length === 2 ? '0:' + rt : rt) : null;
+  if ($('#pgSelfRace').value && !rsec){ alert('Enter the time of your recent race as h:mm:ss or mm:ss.'); return; }
+  const self = {km: +$('#pgSelfKm').value || 0, long: +$('#pgSelfLong').value || 0, m: +$('#pgSelfRace').value || 0, sec: rsec || 0};
+  const goal = {dist: $('#pgDist').value, km: isCustom ? ckm : undefined, date: $('#pgDate').value, time: t || '', days: +$('#pgDays').value, longDay: +$('#pgLong').value,
+    self: self.km || self.long || (self.m && self.sec) ? self : null};
+  const same = PLAN?.goal && PLAN.goal.dist === goal.dist && PLAN.goal.km === goal.km && PLAN.goal.date === goal.date;
+  PLAN = {...(same ? PLAN : {log: []}), goal, created: same ? PLAN.created : Date.now(), lastAct: null, lastSig: null};
+  PLAN_EDIT = false;
+  renderPlan(); saveStore();
+};
+$('#pgDist').onchange = () => $('#pgKmBox').classList.toggle('hidden', $('#pgDist').value !== 'custom');
+$('#pgCancel').onclick = () => { PLAN_EDIT = false; renderPlan(); };
+fillPlanForm();
+
 function showView(v){
   if (v === 'run' && MAP) setTimeout(() => MAP.invalidateSize());
   if (APP && document.body.dataset.view !== v) APP.postMessage({cmd: 'view', view: v});   // keep the app's tab bar in step
@@ -1470,6 +1986,9 @@ function openDemo(view){
   GEAR = [{id: 'demo1', brand: 'Trail', model: 'Runner 3', name: 'Old faithful', from: ago(720), sports: ['RUNNING'], alertKm: 800, startKm: 0, retired: true, retiredOn: ago(300)},
           {id: 'demo2', brand: 'Road', model: 'Cruiser 9', name: '', from: ago(300), sports: ['RUNNING', 'TRAIL_RUNNING'], alertKm: 800, startKm: 0, retired: false},
           {id: 'demo3', brand: 'Speed', model: 'Racer 2', name: 'Race day', from: ago(60), sports: [], alertKm: 400, startKm: 0, retired: false}];
+  { const race = new Date(); race.setDate(race.getDate() + 105 + (7 - race.getDay()) % 7);   // a Sunday ~15 weeks ahead
+    PLAN = {goal: {dist: 'marathon', date: ymdStr(race), time: '3:20:00', days: 4, longDay: 6}, created: Date.now(),
+      log: [{date: Date.now() - DAY, act: 'running 10.7 km (demo)', items: ['On track: no changes needed.']}]}; }
   start(demoData());
   RUNS.slice(-40).forEach(demoDeep);   // fictional per-second data for the recent runs, so the run view has charts
   RUNS.filter(r => r.pace < 300).slice(-8).forEach(r => ASSIGN[sessionKey(r)] = 'demo3');   // fast runs in the racing shoes
@@ -1481,11 +2000,14 @@ if (HASH.has('demo')) openDemo(HASH.get('view'));
 else if (stored && stored.sessions.length){
   userHrMax = stored.hrMax; PROFILE = stored.profile; GEAR = stored.gear; ASSIGN = stored.assign; EDITS = stored.edits; DELETED = new Set(stored.deleted);
   if (typeof stored.anaSport === 'string') ANA_SPORT = stored.anaSport;   // last sport chosen in Analysis
+  if (stored.plan?.goal) PLAN = stored.plan;
   start(stored.sessions);
   status(`${ALL.length} stored trainings loaded. New imports are added.`);
 } else {
+  if (stored?.plan?.goal) PLAN = stored.plan;   // a plan can exist without any trainings
+  renderPlan();
   $('#appEmpty').classList.remove('hidden');
-  if (!APP) showView('settings');   // nothing yet: start at Import
+  if (!APP) showView(PLAN ? 'plan' : 'settings');   // nothing yet: start at Import
 }
 renderShoes();
 </script>

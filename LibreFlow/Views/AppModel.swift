@@ -148,7 +148,7 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
             try? (m["text"] as? String ?? "").write(to: url, atomically: true, encoding: .utf8)
             shareURL = ShareItem(url: url)
         case "view":   // the page switched view itself (e.g. a run opened from All Runs)
-            if let t = ["run": 0, "trends": 1, "runs": 2][m["view"] as? String ?? ""], t != tab { tab = t }
+            if let t = ["run": 0, "trends": 1, "runs": 2, "plan": 4][m["view"] as? String ?? ""], t != tab { tab = t }
         case "status":
             pageStatus = m["text"] as? String ?? ""
         case "strava":
@@ -191,9 +191,9 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         webView.evaluateJavaScript("window.appSetStrava && appSetStrava(\(stravaEnabled)); 0")
     }
 
-    /// Show the page view that belongs to an app tab (0 Latest Run, 1 Analysis, 2 All Runs).
+    /// Show the page view that belongs to an app tab (0 Latest Activity, 1 Analysis, 2 All Activities, 4 Plan; 3 is Settings).
     func showPageView(forTab t: Int) {
-        guard pageReady, let v = [0: "run", 1: "trends", 2: "runs"][t] else { return }
+        guard pageReady, let v = [0: "run", 1: "trends", 2: "runs", 4: "plan"][t] else { return }
         webView.evaluateJavaScript("showView('\(v)'); 0")
     }
 

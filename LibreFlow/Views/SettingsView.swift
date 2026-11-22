@@ -112,6 +112,11 @@ struct SettingsView: View {
                 } header: { Text("Data") } footer: {
                     Text("All data stays on this iPhone (in the app's folder, also visible in the Files app). No account, no cloud, no tracking.")
                 }
+
+                // --- about ---
+                Section {
+                    LabeledContent("Version", value: Self.appVersion)
+                } header: { Text("About") }
             }
             .navigationTitle("Settings")
             .scrollDismissesKeyboard(.interactively)
@@ -150,5 +155,15 @@ struct SettingsView: View {
             await model.applySettings(hrMax: Int(hrMax), hrRest: Int(hrRest), aet: Int(aet), ant: Int(ant))
             fill()
         }
+    }
+}
+
+extension SettingsView {
+    /// "1.2 (202611221530)": marketing version and build number from the app bundle
+    static var appVersion: String {
+        let info = Bundle.main.infoDictionary
+        let v = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let b = info?["CFBundleVersion"] as? String
+        return b.map { "\(v) (\($0))" } ?? v
     }
 }

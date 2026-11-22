@@ -12,6 +12,8 @@ struct LibreFlowApp: App {
                     .tabItem { Label("Latest Activity", systemImage: "figure.run") }.tag(0)
                 AnalysisView(tag: 1, title: "Analysis")
                     .tabItem { Label("Analysis", systemImage: "chart.xyaxis.line") }.tag(1)
+                AnalysisView(tag: 4, title: "Running Plan")
+                    .tabItem { Label("Running Plan", systemImage: "calendar") }.tag(4)
                 AnalysisView(tag: 2, title: "All Activities")
                     .tabItem { Label("All Activities", systemImage: "list.bullet") }.tag(2)
                 SettingsView()
