@@ -1,7 +1,8 @@
 import SwiftUI
 import MapKit
 
-/// Preview of exactly what would be exported. What is included (heart rate, GPS route) is set in Settings › Privacy.
+/// Preview of exactly what would be exported. Heart rate and GPS route start from Settings › Privacy and can be
+/// changed here for this one export only (the settings themselves stay as they are).
 /// toStrava = false: save the run as a GPX file (TCX without GPS). toStrava = true: upload directly via the Strava API (paid subscription).
 struct StravaExportView: View {
     let trainingId: String
@@ -10,8 +11,9 @@ struct StravaExportView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var training: DecodedTraining?
-    @AppStorage("exportHeartRate") private var includeHR = false   // Settings › Privacy
-    @AppStorage("exportGPS") private var includeGPS = true
+    // start from Settings › Privacy; changing them here only affects this export
+    @State private var includeHR = UserDefaults.standard.bool(forKey: "exportHeartRate")
+    @State private var includeGPS = UserDefaults.standard.object(forKey: "exportGPS") as? Bool ?? true
     @State private var name = ""
     @State private var busy = false
     @State private var message: String?
@@ -42,10 +44,14 @@ struct StravaExportView: View {
                     Section {
                         if toStrava { TextField("Activity name", text: $name) }
                         LabeledContent("Time, distance, altitude, speed, cadence", value: "Included")
-                        LabeledContent("GPS route", value: includeGPS ? (t.route.isEmpty ? "None recorded" : "Included") : "Left out")
-                        LabeledContent("Heart rate", value: includeHR ? "Included" : "Left out")
+                        if t.route.isEmpty {
+                            LabeledContent("GPS route", value: "None recorded")
+                        } else {
+                            Toggle("Include GPS route", isOn: $includeGPS)
+                        }
+                        Toggle("Include heart rate", isOn: $includeHR)
                     } header: { Text(toStrava ? "What is sent" : "What is in the file") } footer: {
-                        Text("Change what is included under Settings › Privacy.")
+                        Text("Starts from Settings › Privacy. Changes here only apply to this export.")
                     }
                     if !toStrava {
                         Section {

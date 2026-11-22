@@ -226,9 +226,9 @@ ol{padding-left:20px}
   <div class="grid">
     <section class="card"><h2>Km per year</h2><p class="hint" id="yearHint">Total and number of activities.</p><div class="chart"><canvas id="cYear"></canvas></div></section>
     <section class="card"><h2>Seasonal pattern</h2><p class="hint">Average km per calendar month over all years.</p><div class="chart"><canvas id="cSeason"></canvas></div></section>
-    <section class="card"><h2>Pace trend</h2><p class="hint">Average pace per run (min/km) and monthly median.</p><div class="chart"><canvas id="cPace"></canvas></div></section>
-    <section class="card"><h2>Aerobic efficiency</h2><p class="hint">Metres per heartbeat (speed ÷ heart rate), monthly median. Higher = fitter.</p><div class="chart"><canvas id="cEff"></canvas></div></section>
-    <section class="card"><h2>Fitness (VDOT estimate)</h2><p class="hint">Best VDOT per quarter, from whole runs ≥ 3 km and best efforts.</p><div class="chart"><canvas id="cVdot"></canvas></div></section>
+    <section class="card runonly"><h2>Pace trend</h2><p class="hint">Average pace per run (min/km) and monthly median.</p><div class="chart"><canvas id="cPace"></canvas></div></section>
+    <section class="card runonly"><h2>Aerobic efficiency</h2><p class="hint">Metres per heartbeat (speed ÷ heart rate), monthly median. Higher = fitter.</p><div class="chart"><canvas id="cEff"></canvas></div></section>
+    <section class="card runonly"><h2>Fitness (VDOT estimate)</h2><p class="hint">Best VDOT per quarter, from whole runs ≥ 3 km and best efforts.</p><div class="chart"><canvas id="cVdot"></canvas></div></section>
     <section class="card"><h2>Intensity distribution</h2><p class="hint">Training time per month by heart rate zone (last 12 months).</p><div class="chart"><canvas id="cInt"></canvas></div></section>
   </div>
 
@@ -241,16 +241,16 @@ ol{padding-left:20px}
     <div class="chart"><canvas id="cLoad"></canvas></div>
   </section>
   <div class="grid">
-    <section class="card"><h2>Best efforts within runs</h2><p class="hint">Fastest 1 km, 5 km and 10 km anywhere within a run, best per quarter (min/km).</p><div class="chart"><canvas id="cBest"></canvas></div></section>
-    <section class="card"><h2>Aerobic decoupling</h2><p class="hint">How much your efficiency (pace per heartbeat) drops in the second half, runs ≥ 40 min. Below 5% = strong aerobic base.</p><div class="chart"><canvas id="cDec"></canvas></div></section>
-    <section class="card"><h2>Polar running index</h2><p class="hint">Polar's own fitness estimate per run, monthly median.</p><div class="chart"><canvas id="cRi"></canvas></div></section>
-    <section class="card"><h2>Cadence</h2><p class="hint">Steps per minute, monthly median.</p><div class="chart"><canvas id="cCad"></canvas></div></section>
+    <section class="card runonly"><h2>Best efforts within runs</h2><p class="hint">Fastest 1 km, 5 km and 10 km anywhere within a run, best per quarter (min/km).</p><div class="chart"><canvas id="cBest"></canvas></div></section>
+    <section class="card"><h2>Aerobic decoupling</h2><p class="hint">How much your efficiency (speed per heartbeat) drops in the second half, activities ≥ 40 min. Below 5% = strong aerobic base.</p><div class="chart"><canvas id="cDec"></canvas></div></section>
+    <section class="card runonly"><h2>Polar running index</h2><p class="hint">Polar's own fitness estimate per run, monthly median.</p><div class="chart"><canvas id="cRi"></canvas></div></section>
+    <section class="card runonly"><h2>Cadence</h2><p class="hint">Steps per minute, monthly median.</p><div class="chart"><canvas id="cCad"></canvas></div></section>
   </div>
-  <section class="card"><h2>Personal records within runs</h2><p class="hint">From the per-second distance data, so a fast 5 km in the middle of a long run counts too.</p><div id="prs"></div></section>
+  <section class="card runonly"><h2>Personal records within runs</h2><p class="hint">From the per-second distance data, so a fast 5 km in the middle of a long run counts too.</p><div id="prs"></div></section>
 
   <div class="grid" style="margin-top:14px">
-    <section class="card"><h2>Predictions & training paces</h2><p class="hint" id="predHint"></p><div id="pred"></div></section>
-    <section class="card"><h2>Records</h2><p class="hint">Based on whole runs.</p><div id="records"></div></section>
+    <section class="card runonly"><h2>Predictions & training paces</h2><p class="hint" id="predHint"></p><div id="pred"></div></section>
+    <section class="card"><h2>Records</h2><p class="hint" id="recHint">Based on whole activities.</p><div id="records"></div></section>
   </div>
 </div>
 
@@ -298,6 +298,9 @@ let ALL = [], RUNS = [], selected = new Set(), charts = {}, hrMax = null;
 let ANA_SPORT = (() => { try { return localStorage.getItem('libreflow.anaSport') || ''; } catch { return ''; } })();
 const NOUNS = {RUNNING: ['run', 'runs'], TRAIL_RUNNING: ['run', 'runs'], TREADMILL_RUNNING: ['run', 'runs'], CYCLING: ['ride', 'rides'],
   MOUNTAIN_BIKING: ['ride', 'rides'], WALKING: ['walk', 'walks'], HIKING: ['hike', 'hikes'], SWIMMING: ['swim', 'swims']};
+let HAS_RUN = true;
+const VERBS = {run: 'run', ride: 'ride', walk: 'walk', hike: 'hike', swim: 'swim'};
+const verb = () => VERBS[noun(false)] || 'train';   // "you run most in May", "you ride…", "you train…"
 const noun = plural => (NOUNS[ANA_SPORT] || ['activity', 'activities'])[plural ? 1 : 0];
 
 /* ---------- helpers ---------- */
@@ -524,8 +527,9 @@ async function importEntries(entries){
     PROFILE = {...PROFILE, ...Object.fromEntries(Object.entries(importProfile).filter(([k,v]) => v != null && !(PROFILE.userSet||[]).includes(k))), date: +importProfile.date};
   importProfile = null;
   isDemo = false;
+  CUR_RUN = null;    // otherwise Latest Activity keeps showing the activity that was open before the import
   start(merged);
-  showView('run');   // show the newest run right away
+  showView('run');   // show the newest activity right away
   const saved = saveStore();
   status(`${out.length} trainings read: ${added} new, ${out.length - added} already present. Total ${merged.length}.` +
     ` ${ALL.filter(s => s.deep).length} with per-second data for deeper analysis.` +
@@ -652,6 +656,8 @@ function refresh(){
   ALL.forEach(s => s.pace = s.km > 0 ? s.sec / s.km : null);
   ACTS = ALL;                                                   // Latest Activity / All Activities: every sport
   RUNS = ANA_SPORT ? ALL.filter(s => s.sport === ANA_SPORT) : ALL;   // Analysis: all activities or one sport
+  HAS_RUN = RUNS.some(s => isRunSport(s.sport));                     // pace, VDOT, predictions… only with running
+  document.querySelectorAll('.runonly').forEach(e => e.classList.toggle('hidden', !HAS_RUN));
   const est = estimateHrMax(RUNS);
   if (!hrMax) hrMax = PROFILE.hrMax || est || 190;
   P = prof();
@@ -830,7 +836,8 @@ function renderKpis(A){
     [fmtNum(sec/3600), 'hours'],
     [fmtNum(A.km12w/12,1), 'km/week (12 wk)'],
     [fmtNum(A.last12.length/12,1), `${noun(true)}/week (12 wk)`],
-    [A.curVdot ? fmtNum(A.curVdot,1) : '–', 'VDOT (120 days)'],
+    HAS_RUN ? [A.curVdot ? fmtNum(A.curVdot,1) : '–', 'VDOT (120 days)']
+            : (sec12 => [sec12 ? fmtNum(A.last12.reduce((a,r)=>a+r.km,0) / sec12 * 3600, 1) : '–', 'km/h average (12 wk)'])(A.last12.reduce((a,r)=>a+r.sec,0)),
   ];
   $('#kpis').innerHTML = items.map(([b,s]) => `<div class="kpi"><b>${b}</b><small>${s}</small></div>`).join('');
 }
@@ -852,7 +859,7 @@ function renderAdvice(A){
     if (ch > 0.25) add('warn','Big jump in weekly volume', `Last week ${fmtNum(A.lastW.km,1)} km, ${fmtNum(ch*100)}% above the average of the 4 weeks before. Keep increases around 10%.`);
   }
   if (A.km4w > 0 && A.longest4 / (A.km4w/4) > 0.4 && A.longest4 > 12)
-    add('warn', `Long ${noun(false)} relatively heavy`, `Your longest ${noun(false)} (${fmtNum(A.longest4,1)} km) is more than 40% of your average weekly volume. More short easy km during the week makes the long run safer.`);
+    add('warn', `Long ${noun(false)} relatively heavy`, `Your longest ${noun(false)} (${fmtNum(A.longest4,1)} km) is more than 40% of your average weekly volume. More short easy km during the week makes the long ${noun(false)} safer.`);
   if (A.zTot > 3*3600){
     const easy = A.z8[0]/A.zTot, mid = A.z8[1]/A.zTot;
     if (easy < 0.65) add('warn','Few truly easy sessions', `Only ${fmtNum(easy*100)}% of your running time (8 wk) was easy (below ${P.aet} bpm), ${fmtNum(mid*100)}% moderate. Most endurance runners improve best with ~75–80% easy and a few targeted hard sessions.`);
@@ -867,11 +874,11 @@ function renderAdvice(A){
     else add('info','Aerobic fitness stable', `Metres per heartbeat: ${fmtNum(A.effNow,2)} now vs ${fmtNum(A.effPrev,2)} before${ya}.`);
   }
   if (A.maxGap > 10) add('info','Break', `In the last 12 weeks there was a gap of ${Math.round(A.maxGap)} days. After a break: first 1–2 weeks at ~70% of your previous volume.`);
-  if (A.streak >= 10) add('warn','No rest day', `You have run ${A.streak} days in a row. Plan at least one rest day per week.`);
+  if (A.streak >= 10) add('warn','No rest day', `You have trained ${A.streak} days in a row. Plan at least one rest day per week.`);
   const runsPw = A.last12.length/12;
-  if (runsPw < 2.5 && A.runs.length > 50) add('info','Frequency', `On average ${fmtNum(runsPw,1)} ${noun(true)} per week. An extra short easy run (30–40 min) is often the cheapest way to get fitter.`);
+  if (runsPw < 2.5 && A.runs.length > 50) add('info','Frequency', `On average ${fmtNum(runsPw,1)} ${noun(true)} per week. An extra short easy ${noun(false)} (30–40 min) is often the cheapest way to get fitter.`);
   const s = A.seasonAvg, lowM = s.indexOf(Math.min(...s)), highM = s.indexOf(Math.max(...s));
-  if (Object.keys(A.years).length >= 3) add('info','Your seasonal pattern', `Historically you run most in ${MONTHS[highM]} (${fmtNum(s[highM])} km) and least in ${MONTHS[lowM]} (${fmtNum(s[lowM])} km). Plan target races where your build-up is naturally good.`);
+  if (Object.keys(A.years).length >= 3) add('info','Your seasonal pattern', `Historically you ${verb()} most in ${MONTHS[highM]} (${fmtNum(s[highM])} km) and least in ${MONTHS[lowM]} (${fmtNum(s[lowM])} km). Plan target races where your build-up is naturally good.`);
 
   // --- from the 1 s data ---
   if (A.L && A.L.ctl > 5){
@@ -882,10 +889,10 @@ function renderAdvice(A){
     else add('good','Load and recovery in balance', t);
   }
   if (A.decRecent != null && A.decN >= 2){
-    const t = `Median ${fmtNum(A.decRecent,1)}% over ${A.decN} runs of an hour or longer (12 wk).`;
+    const t = `Median ${fmtNum(A.decRecent,1)}% over ${A.decN} ${noun(true)} of an hour or longer (12 wk).`;
     if (A.decRecent <= 5) add('good','Strong aerobic base', t + ' Your heart rate barely rises in the second half at the same pace.');
-    else if (A.decRecent > 8) add('warn','Heart rate drifts up on long runs', t + ' Above ~5% points to an aerobic base that can still grow (or heat/too little drinking). More easy long runs below your aerobic threshold help.');
-    else add('info','Aerobic decoupling', t + ' Below 5% is the goal for long easy runs.');
+    else if (A.decRecent > 8) add('warn',`Heart rate drifts up on long ${noun(true)}`, t + ` Above ~5% points to an aerobic base that can still grow (or heat/too little drinking). More easy long ${noun(true)} below your aerobic threshold help.`);
+    else add('info','Aerobic decoupling', t + ` Below 5% is the goal for long easy ${noun(true)}.`);
   }
   for (const D of A.newPr || []){
     const b = A.pr[D], n = {1000:'1 km',5000:'5 km',10000:'10 km',21097:'half marathon'}[D];
@@ -982,12 +989,13 @@ function renderRecords(A){
   const by = Object.entries(A.years).sort((a,b)=>b[1].km-a[1].km)[0];
   const rows = [
     [`Longest ${noun(false)}`, longest && `${fmtNum(longest.km,1)} km – ${fmtDate(longest.date)}`],
-    ...[[5,'≥ 5 km'],[10,'≥ 10 km'],[21,'≥ 21 km']].map(([d,l]) => { const x = fast(d); return [`Fastest avg pace ${l}`, x && `${fmtPace(x.pace)} /km (${fmtNum(x.km,1)} km, ${fmtDate(x.date)})`]; }),
+    ...(HAS_RUN ? [[5,'≥ 5 km'],[10,'≥ 10 km'],[21,'≥ 21 km']] : []).map(([d,l]) => { const x = fast(d); return [`Fastest avg pace ${l}`, x && `${fmtPace(x.pace)} /km (${fmtNum(x.km,1)} km, ${fmtDate(x.date)})`]; }),
     ['Biggest week', bw && `${fmtNum(bw.km,1)} km – week of ${fmtDate(bw.start)}`],
-    ['Best year', by && `${by[0]}: ${fmtNum(by[1].km)} km in ${by[1].n} runs`],
-    ['Highest VDOT ever', A.quarters.length && (q => `${fmtNum(q.vdot,1)} (${q.k})`)(best(A.quarters, q => q.vdot))],
+    ['Best year', by && `${by[0]}: ${fmtNum(by[1].km)} km in ${by[1].n} ${by[1].n === 1 ? noun(false) : noun(true)}`],
+    ['Highest VDOT ever', HAS_RUN && A.quarters.length && (q => `${fmtNum(q.vdot,1)} (${q.k})`)(best(A.quarters, q => q.vdot))],
   ];
-  $('#records').innerHTML = `<table>${rows.map(([a,b]) => `<tr><td>${a}</td><td>${b || '–'}</td></tr>`).join('')}</table>`;
+  $('#recHint').textContent = `Based on whole ${noun(true)}.`;
+  $('#records').innerHTML = `<table>${rows.filter(([a,b]) => b || !/VDOT/.test(a)).map(([a,b]) => `<tr><td>${a}</td><td>${b || '–'}</td></tr>`).join('')}</table>`;
 }
 
 function renderTable(){
