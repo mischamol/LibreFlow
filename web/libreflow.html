@@ -23,7 +23,7 @@
 }
 *{box-sizing:border-box}
 html{touch-action:manipulation}   /* no double-tap zoom; pinch-to-zoom still works */
-@media (pointer:coarse){input,select,textarea{font-size:16px}}   /* iOS zooms in on focus below 16px */
+@media (pointer:coarse){input,select,textarea{font-size:16px !important}}   /* !important: 'font:inherit' on inputs would otherwise win */   /* iOS zooms in on focus below 16px */
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 header{padding:28px 16px 8px;max-width:1200px;margin:0 auto}
 h1{margin:0;font-size:26px;letter-spacing:-.02em}
@@ -126,6 +126,10 @@ details summary{cursor:pointer;color:var(--accent2)}
 .psess .tag.q{background:var(--warn-bg)}
 .psess .tag.r{background:var(--bad-bg)}
 sup a{text-decoration:none}
+.formGrid label.hidden{display:none}
+.hms{display:flex;align-items:center;gap:4px}
+.hms input{width:4.6em;min-width:0}
+.hms b{color:var(--muted);font-weight:400}
 ol{padding-left:20px}
 </style>
 </head>
@@ -284,7 +288,7 @@ ol{padding-left:20px}
         <label>Distance <select id="pgDist"><option value="5k">5 km</option><option value="10k">10 km</option><option value="10mi">10 miles</option><option value="half">Half marathon</option><option value="marathon" selected>Marathon</option><option value="custom">Other distance…</option></select></label>
         <label id="pgKmBox" class="hidden">Distance (km) <input type="number" id="pgKm" min="3" max="100" step="0.1" placeholder="e.g. 15"></label>
         <label>Race date <input type="date" id="pgDate" required></label>
-        <label>Target time (optional) <input type="text" id="pgTime" placeholder="h:mm:ss" inputmode="numeric"></label>
+        <label>Target time (optional) <span class="hms"><input type="number" id="pgTimeH" min="0" max="23" placeholder="h" inputmode="numeric" aria-label="hours"><b>:</b><input type="number" id="pgTimeM" min="0" max="59" placeholder="mm" inputmode="numeric" aria-label="minutes"><b>:</b><input type="number" id="pgTimeS" min="0" max="59" placeholder="ss" inputmode="numeric" aria-label="seconds"></span></label>
         <label>Running days per week <select id="pgDays"><option>3</option><option selected>4</option><option>5</option><option>6</option></select></label>
         <label>Long run on <select id="pgLong"><option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option><option value="4">Friday</option><option value="5">Saturday</option><option value="6" selected>Sunday</option></select></label>
       </div>
@@ -294,7 +298,7 @@ ol{padding-left:20px}
           <label>Running now (km/week) <input type="number" id="pgSelfKm" min="0" max="250" step="1" placeholder="from your data"></label>
           <label>Longest run last month (km) <input type="number" id="pgSelfLong" min="0" max="60" step="0.5" placeholder="from your data"></label>
           <label>Recent race or time trial <select id="pgSelfRace"><option value="">none</option><option value="5000">5 km</option><option value="10000">10 km</option><option value="21097.5">Half marathon</option><option value="42195">Marathon</option></select></label>
-          <label>Its time <input type="text" id="pgSelfTime" placeholder="h:mm:ss" inputmode="numeric"></label>
+          <label>Its time <span class="hms"><input type="number" id="pgSelfTimeH" min="0" max="23" placeholder="h" inputmode="numeric" aria-label="hours"><b>:</b><input type="number" id="pgSelfTimeM" min="0" max="59" placeholder="mm" inputmode="numeric" aria-label="minutes"><b>:</b><input type="number" id="pgSelfTimeS" min="0" max="59" placeholder="ss" inputmode="numeric" aria-label="seconds"></span></label>
         </div>
       </details>
       <div class="row"><button type="submit" class="primary" id="pgSave">Create plan</button><button type="button" id="pgCancel" class="hidden">Cancel</button></div>
@@ -1771,7 +1775,7 @@ function renderPlan(){
   if (!has){ $('#planGoalSummary').innerHTML = '<p class="hint" style="margin:0">No goal yet.</p>'; PLAN_OUT = null; return; }
   const o = PLAN_OUT = buildPlan(new Date()), g = PLAN.goal;
   $('#planGoalSummary').innerHTML = `<div class="row" style="justify-content:space-between"><p style="margin:0"><b>${o.G.name}</b> on ${o.race.toLocaleDateString('en-GB', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'})}` +
-    ` · ${Math.max(0, Math.ceil((o.race - o.today) / DAY))} days to go${g.time ? ` · target ${escH(g.time)}` : ''} · ${g.days} days a week, long run on ${WEEKDAYS[g.longDay]}</p>` +
+    ` · ${Math.max(0, Math.ceil((o.race - o.today) / DAY))} days to go${g.time ? ` · target ${fmtTime(parseDur(g.time))}` : ''} · ${g.days} days a week, long run on ${WEEKDAYS[g.longDay]}</p>` +
     `<div class="row"><button class="small" id="pgEdit">Change goal</button><button class="small danger" id="pgDel">Delete</button></div></div>`;
   $('#pgEdit').onclick = () => { PLAN_EDIT = true; fillPlanForm(); renderPlan(); };
   $('#pgDel').onclick = () => { if (!confirm('Delete this goal and its plan?')) return; PLAN = null; PLAN_EDIT = false; saveStore(); renderPlan(); };
@@ -1860,32 +1864,43 @@ function renderPlan(){
 }
 
 let PLAN_EDIT = false;
+// time as three number fields (an iPhone number keyboard has no ':'); null = empty, false = invalid
+function getHms(id){
+  const v = ['H', 'M', 'S'].map(k => $('#' + id + k).value.trim());
+  if (v.every(x => x === '')) return null;
+  const [h, m, s] = v.map(x => x === '' ? 0 : +x);
+  if (![h, m, s].every(x => Number.isInteger(x) && x >= 0) || m > 59 || s > 59) return false;
+  return h * 3600 + m * 60 + s || null;
+}
+function setHms(id, sec){
+  const f = sec ? [Math.floor(sec / 3600), Math.floor(sec % 3600 / 60), Math.round(sec % 60)] : ['', '', ''];
+  ['H', 'M', 'S'].forEach((k, i) => $('#' + id + k).value = f[i] === '' ? '' : i ? pad(f[i]) : f[i]);
+}
 function fillPlanForm(){
   const g = PLAN?.goal;
   $('#pgDist').value = g?.dist || 'marathon';
   $('#pgKm').value = g?.km || '';
   $('#pgKmBox').classList.toggle('hidden', $('#pgDist').value !== 'custom');
   $('#pgDate').value = g?.date || ymdStr(new Date(Date.now() + 16 * 7 * DAY));
-  $('#pgTime').value = g?.time || '';
+  setHms('pgTime', g?.time ? parseDur(g.time) : null);
   $('#pgDays').value = String(g?.days || 4);
   $('#pgLong').value = String(g?.longDay ?? 6);
   $('#pgSelfKm').value = g?.self?.km || ''; $('#pgSelfLong').value = g?.self?.long || '';
-  $('#pgSelfRace').value = g?.self?.m ? String(g.self.m) : ''; $('#pgSelfTime').value = g?.self?.sec ? fmtTime(g.self.sec) : '';
+  $('#pgSelfRace').value = g?.self?.m ? String(g.self.m) : ''; setHms('pgSelfTime', g?.self?.sec || null);
   $('#pgSelfBox').open = !!g?.self || !ALL.some(s => isRunSport(s.sport) && s.date > Date.now() - 28 * DAY);
   $('#pgSave').textContent = g ? 'Save goal' : 'Create plan';
   $('#pgCancel').classList.toggle('hidden', !g);
 }
 $('#planForm').onsubmit = e => {
   e.preventDefault();
-  const time = $('#pgTime').value.trim();
-  if (time && !/^\d{1,2}:\d{2}(:\d{2})?$/.test(time)){ alert('Enter the target time as h:mm:ss (for example 3:45:00) or mm:ss.'); return; }
+  const tsec = getHms('pgTime');
+  if (tsec === false){ alert('Enter the target time as hours, minutes and seconds (minutes and seconds 0–59).'); return; }
   const isCustom = $('#pgDist').value === 'custom', ckm = +$('#pgKm').value;
   if (isCustom && !(ckm >= 3 && ckm <= 100)){ alert('Enter a distance between 3 and 100 km.'); return; }
-  const short = ['5k', '10k'].includes($('#pgDist').value) || (isCustom && ckm < 15);   // 2 parts: mm:ss for 5/10 km, h:mm for longer races
-  const t = time && time.split(':').length === 2 ? (short ? '0:' + time : time + ':00') : time;
+  const t = tsec ? `${Math.floor(tsec / 3600)}:${pad(Math.floor(tsec % 3600 / 60))}:${pad(tsec % 60)}` : '';
   if (!$('#pgDate').value || ymdDate($('#pgDate').value) <= dayStart(new Date())){ alert('Choose a race date in the future.'); return; }
-  const rt = $('#pgSelfTime').value.trim(), rsec = rt ? parseDur(rt.split(':').length === 2 ? '0:' + rt : rt) : null;
-  if ($('#pgSelfRace').value && !rsec){ alert('Enter the time of your recent race as h:mm:ss or mm:ss.'); return; }
+  const rsec = getHms('pgSelfTime');
+  if (rsec === false || ($('#pgSelfRace').value && !rsec)){ alert('Enter the time of your recent race as hours, minutes and seconds.'); return; }
   const self = {km: +$('#pgSelfKm').value || 0, long: +$('#pgSelfLong').value || 0, m: +$('#pgSelfRace').value || 0, sec: rsec || 0};
   const goal = {dist: $('#pgDist').value, km: isCustom ? ckm : undefined, date: $('#pgDate').value, time: t || '', days: +$('#pgDays').value, longDay: +$('#pgLong').value,
     self: self.km || self.long || (self.m && self.sec) ? self : null};
@@ -1931,7 +1946,7 @@ window.appSetSettings = o => {
 window.appCommand = cmd => {
   if (cmd === 'backup') exportBackup();
   else if (cmd === 'csv') exportCsv();
-  else if (cmd === 'demo'){ isDemo = true; status('Demo data: 8 years of fictional runs (not saved).'); start(demoData()); }
+  else if (cmd === 'demo') openDemo(document.body.dataset.view || 'run');   // same demo as the browser: charts, routes, shoes, plan
   else if (cmd === 'clear') clearStore(true);
   else if (cmd === 'reload'){ const st = loadStore(); if (st && st.sessions.length){ isDemo = false; userHrMax = st.hrMax; PROFILE = st.profile; EDITS = st.edits; DELETED = new Set(st.deleted); GEAR = st.gear; ASSIGN = st.assign; start(st.sessions); status(`${ALL.length} stored trainings loaded.`); } }
   return window.appSettings();

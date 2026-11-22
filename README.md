@@ -4,9 +4,9 @@ An iPhone app that reads your Polar watch directly over Bluetooth, analyses your
 when you choose to – exports a training or sends it to Strava. No Polar Flow, no account, no cloud, no external AI.
 Tested with a Polar Grit X (firmware 3.1.0).
 
-| Latest Activity | Analysis | Running Plan | All Activities |
-|---|---|---|---|
-| ![Latest Activity](docs/screenshots/latest-run.png) | ![Analysis](docs/screenshots/analysis.png) | ![Running Plan](docs/screenshots/plan.png) | ![All Activities](docs/screenshots/all-runs.png) |
+| Latest Activity | Analysis | Running Plan | All Activities | Settings |
+|---|---|---|---|---|
+| ![Latest Activity](docs/screenshots/latest-run.png) | ![Analysis](docs/screenshots/analysis.png) | ![Running Plan](docs/screenshots/plan.png) | ![All Activities](docs/screenshots/all-runs.png) | ![Settings](docs/screenshots/app-settings.png) |
 
 *Fictional demo data.* There is also a [browser version](web/README.md) of the same analysis for a Mac or PC.
 
