@@ -1454,16 +1454,17 @@ const PLAN_SRC = {
   VANPOPPEL2021: 'van Poppel D, van der Worp M, Slabbekoorn A, et al. Risk factors for overuse injuries in short- and long-distance running: a systematic review. J Sport Health Sci 2021;10:14–28. doi:10.1016/j.jshs.2020.06.006',
   MUJIKA2000: 'Mujika I, Padilla S. Detraining: loss of training-induced physiological and performance adaptations. Part I and Part II. Sports Med 2000;30:79–87 and 145–154.',
   COYLE1984: 'Coyle EF, Martin WH, Bloomfield SA, Lowry OH, Holloszy JO. Time course of loss of adaptations after stopping prolonged intense endurance training. J Appl Physiol 1984;57:1857–1864.',
+  MILANOVIC2015: 'Milanović Z, Sporiš G, Weston M. Effectiveness of high-intensity interval training (HIT) and continuous endurance training for VO2max improvements: a systematic review and meta-analysis of controlled trials. Sports Med 2015;45:1469–1481. doi:10.1007/s40279-015-0365-0',
   BLAGROVE2018: 'Blagrove RC, Howatson G, Hayes PR. Effects of strength training on the physiological determinants of middle- and long-distance running performance: a systematic review. Sports Med 2018;48:1117–1149.',
 };
 const PLAN_SRC_KEYS = Object.keys(PLAN_SRC);
 const cite = keys => keys.map(k => `<sup><a href="#psrc-${k}">[${PLAN_SRC_KEYS.indexOf(k) + 1}]</a></sup>`).join('');
 
 const GOALS = {
-  '5k':       {name: '5 km',          m: 5000,    minW: 6,  longCap: 14, minPeak: 25, maxShare: .35, taper: [.6],      peak: 3, build: 4},
-  '10k':      {name: '10 km',         m: 10000,   minW: 6,  longCap: 18, minPeak: 30, maxShare: .35, taper: [.6],      peak: 3, build: 4},
-  'half':     {name: 'Half marathon', m: 21097.5, minW: 8,  longCap: 22, minPeak: 35, maxShare: .40, taper: [.8, .55], peak: 3, build: 5},
-  'marathon': {name: 'Marathon',      m: 42195,   minW: 12, longCap: 32, minPeak: 50, maxShare: .50, taper: [.7, .5],  peak: 4, build: 6},
+  '5k':       {name: '5 km',          m: 5000,    minW: 6,  longCap: 12, longNeed: 7,  minPeak: 15, maxShare: .45, taper: [.6],      peak: 3, build: 4},
+  '10k':      {name: '10 km',         m: 10000,   minW: 6,  longCap: 16, longNeed: 11, minPeak: 22, maxShare: .45, taper: [.6],      peak: 3, build: 4},
+  'half':     {name: 'Half marathon', m: 21097.5, minW: 8,  longCap: 22, longNeed: 16, minPeak: 30, maxShare: .45, taper: [.8, .55], peak: 3, build: 5},
+  'marathon': {name: 'Marathon',      m: 42195,   minW: 12, longCap: 32, longNeed: 28, minPeak: 45, maxShare: .50, taper: [.7, .5],  peak: 4, build: 6},
 };
 const GOAL_KM = {'5k': 5, '10k': 10, '10mi': 16.0934, 'half': 21.0975, 'marathon': 42.195};
 function goalSpec(g){
@@ -1477,7 +1478,7 @@ function goalSpec(g){
     let i = A.findIndex(x => x.m >= m); if (i < 1) i = i === 0 ? 1 : A.length - 1;
     const a = A[i - 1], b = A[i], f = Math.min(1, Math.max(0, (m - a.m) / (b.m - a.m)));
     const lerp = k => a[k] + (b[k] - a[k]) * f;
-    G = {m, minW: Math.round(lerp('minW')), longCap: Math.round(lerp('longCap')), minPeak: Math.round(lerp('minPeak')), maxShare: lerp('maxShare'),
+    G = {m, minW: Math.round(lerp('minW')), longCap: Math.round(lerp('longCap')), longNeed: Math.round(lerp('longNeed')), minPeak: Math.round(lerp('minPeak')), maxShare: lerp('maxShare'),
       taper: km <= 12 ? [.6] : km <= 30 ? [.8, .55] : [.7, .5], peak: Math.round(lerp('peak')), build: Math.round(lerp('build'))};
   }
   return {...G, name, km, long: km >= 15, mara: km >= 30, ultra: km > 42.2};
@@ -1562,10 +1563,11 @@ function buildPlan(now){
 
   // weekly distance and long run per week
   const taperN = G.taper.length;
-  let prev = Math.max(10, mWeek.chronic), longPrev = Math.max(mWeek.longest30, mWeek.chronic * .3, 5);
+  let prev = Math.max(8, mWeek.chronic), longPrev = Math.max(mWeek.longest30, mWeek.chronic * .3, 4);   // a complete beginner starts at ~8 km/week
   // experienced runners (running in ≥ 12 of the last 24 months) may aim for the volume they sustained before and
   // rebuild to it a bit faster (15% instead of 10% a week); the long run keeps the strict 30-day rule
   const exp = mWeek.experienced, block = mWeek.block;
+  PLAN_BEGINNER = !exp && mWeek.chronic < 10;
   const peakT = Math.max(G.minPeak, mWeek.chronic * 1.1, Math.min(mWeek.chronic * 1.3, G.minPeak * 1.4), exp ? Math.min(block, G.minPeak * 1.6) : 0);
   const grow = W => exp && W < block * .9 ? 1.15 : 1.1;
   let peakW = 0, peakLong = 0;
@@ -1581,7 +1583,7 @@ function buildPlan(now){
       if (recovery){ long = Math.min(cap, longPrev) * .75; W = Math.min(prev * .75, fit(long)); }
       else {
         W = i === 0 && (spike || restart) ? Math.min(prev, Math.max(10, mWeek.chronic)) : Math.min(Math.max(peakT, prev), prev * grow(prev));
-        long = Math.min(cap, i === 0 && (spike || restart) ? longPrev : longPrev * 1.1, Math.max(W * G.maxShare, longPrev));   // never shrinks, ≤ +10%
+        long = Math.min(cap, i === 0 && (spike || restart) ? longPrev : longPrev * 1.1, Math.max(W * G.maxShare, longPrev, Math.min(longPrev * 1.1, W * .5)));   // never shrinks, ≤ +10%
         W = Math.min(W, fit(long));
         prev = W; longPrev = Math.max(longPrev, long); peakW = Math.max(peakW, W); peakLong = Math.max(peakLong, long);
       }
@@ -1597,20 +1599,23 @@ function buildPlan(now){
     status.push({lvl: 'bad', t: 'Weekly distance cannot grow enough', x: `From ${fmtNum(mWeek.chronic, 0)} km/week now, a safe increase of at most ~10% per week reaches ${fmtNum(peakW, 0)} km before the taper; about ${G.minPeak} km/week is a sensible minimum for this distance.`, src: ['NIELSEN2014', 'BUIST2008']});
   else if (peakW < G.minPeak)
     status.push({lvl: 'warn', t: 'Weekly distance on the low side', x: `The plan peaks at ${fmtNum(peakW, 0)} km/week; ${G.minPeak} km/week would be better for this distance.`, src: ['PFITZINGER']});
-  if (peakLong < G.longCap * .75)
-    status.push({lvl: 'bad', t: 'Long run cannot grow enough', x: `Growing at most 10% beyond your longest run of the last 30 days (${fmtNum(mWeek.longest30, 1)} km), the long run reaches ${fmtNum(peakLong, 0)} km; about ${G.longCap} km is the target for this distance.`, src: ['FRANDSEN2025', 'PFITZINGER']});
-  else if (peakLong < G.longCap * .9)
-    status.push({lvl: 'warn', t: 'Long run on the short side', x: `The longest run in the plan is ${fmtNum(peakLong, 0)} km (target about ${G.longCap} km).`, src: ['FRANDSEN2025', 'PFITZINGER']});
+  if (peakLong < G.longNeed * .75)
+    status.push({lvl: 'bad', t: 'Long run cannot grow enough', x: `Growing at most 10% beyond your longest run of the last 30 days (${fmtNum(mWeek.longest30, 1)} km), the long run reaches ${fmtNum(peakLong, 0)} km; a long run of about ${G.longNeed} km is recommended for this distance.`, src: ['FRANDSEN2025', 'PFITZINGER']});
+  else if (peakLong < G.longNeed)
+    status.push({lvl: 'warn', t: 'Long run on the short side', x: `The longest run in the plan is ${fmtNum(peakLong, 0)} km (about ${G.longNeed} km is recommended).`, src: ['FRANDSEN2025', 'PFITZINGER']});
   if (target && mNow.V && !G.ultra){
     // ~1 VDOT per 4–6 weeks of consistent training at best; regaining a level reached in the last 2 years goes faster
     const regain = mNow.histV && mNow.histV > mNow.V ? Math.min(mNow.histV - mNow.V, weeksLeft / 3) : 0;
-    const need = vdot(G.m, target), gain = Math.min(6, Math.max(weeksLeft / 5, regain));
+    // runners without a training history improve much faster: endurance training raised VO2max by ~5 ml/kg/min
+    // against controls in a meta-analysis (Milanović 2015), on top of a better running economy
+    const novice = !mNow.experienced && !mWeek.experienced ? Math.min(6, weeksLeft * .4) : 0;
+    const need = vdot(G.m, target), gain = Math.min(6, Math.max(weeksLeft / 5, regain, novice));
     const now = predictTime(mNow.V, G.m), best = predictTime(mNow.V + gain, G.m);
     if (need > mNow.V + gain)
-      status.push({lvl: 'bad', t: 'Target time not realistic', x: `${fmtTime(target)} needs VDOT ${fmtNum(need, 1)}; you are at ${fmtNum(mNow.V, 1)} (prediction now ${fmtTime(now)}). With good training until race day about ${fmtTime(best)} is realistic.`, src: ['DANIELS']});
+      status.push({lvl: 'bad', t: 'Target time not realistic', x: `${fmtTime(target)} needs VDOT ${fmtNum(need, 1)}; you are at ${fmtNum(mNow.V, 1)} (prediction now ${fmtTime(now)}). With good training until race day about ${fmtTime(best)} is realistic.`, src: novice ? ['DANIELS', 'MILANOVIC2015'] : ['DANIELS']});
     else if (need > mNow.V + gain / 2)
-      status.push({lvl: 'warn', t: 'Ambitious target time', x: `${fmtTime(target)} needs VDOT ${fmtNum(need, 1)}; you are at ${fmtNum(mNow.V, 1)} (prediction now ${fmtTime(now)}). Possible if training goes well.`, src: ['DANIELS']});
-  } else if (target) status.push({lvl: 'info', t: 'Target time not checked', x: G.ultra ? 'Predictions from shorter runs are not reliable beyond the marathon.' : 'No run of 3 km or more in the last 120 days to estimate your fitness from.', src: ['DANIELS']});
+      status.push({lvl: 'warn', t: 'Ambitious target time', x: `${fmtTime(target)} needs VDOT ${fmtNum(need, 1)}; you are at ${fmtNum(mNow.V, 1)} (prediction now ${fmtTime(now)}). Possible if training goes well.`, src: novice ? ['DANIELS', 'MILANOVIC2015'] : ['DANIELS']});
+  } else if (target) status.push({lvl: 'info', t: 'Target time not checked', x: G.ultra ? 'Predictions from shorter runs are not reliable beyond the marathon.' : 'No run of 3 km or more in the last 120 days to estimate your fitness from yet; it is checked as soon as there is one.', src: ['DANIELS']});
   if (G.ultra) status.push({lvl: 'warn', t: 'Longer than a marathon', x: 'The plan treats this distance like a marathon. Ultra-specific training (back-to-back long runs, time on feet, hiking, fuelling) is not included.', src: ['PFITZINGER']});
   if (G.mara && mNow.V && peakW < 60)
     status.push({lvl: 'info', t: 'Prediction for long races', x: `Predictions from shorter runs assume enough endurance; below about 60 km/week a race of ${fmtNum(G.km, 0)} km or more is often a few minutes slower than predicted.`, src: ['DANIELS', 'PFITZINGER']});
@@ -1687,6 +1692,7 @@ function sess(type, date, km, G, pc, goalPace, o){
   return x;
 }
 
+let PLAN_BEGINNER = false;
 function describe(x, G, pc, goalPace){
   const p = v => pc ? fmtPace(v) + '/km' : '';
   const E = pc ? `${fmtPace(pc.E[0])}–${fmtPace(pc.E[1])}/km` : 'conversational pace';
@@ -1724,6 +1730,8 @@ function describe(x, G, pc, goalPace){
       ['DANIELS'], 'r'],
   }[x.type];
   [x.title, x.detail, x.why, x.src, x.cls] = T;
+  if (PLAN_BEGINNER && ['easy', 'strides', 'long'].includes(x.type))
+    x.detail += ' New to running? Alternate 1–2 min running with 1–2 min walking for this distance, and run a bit more of it every week; skip the strides until you can run 20 minutes without stopping.';
 }
 
 // this week: past days get done / missed, the remaining sessions share what is left of the weekly distance

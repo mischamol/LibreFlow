@@ -56,7 +56,10 @@ are in `CLAUDE.local.md`, which is not in git.
   treated as a marathon with an ultra warning and no VDOT prediction. Dates use calendar arithmetic (`addDays`), not ms, because of DST.
   Without history: `#vPlan` sits outside `#app` (works with 0 trainings; startup renders it); optional
   `goal.self` {km, long, m, sec} counts only for its window after `PLAN.created` (28/30/120 days) and only where
-  the data shows less (`selfReport`). Below 25 km/week no hard sessions; warm-up/cool-down 2 km below 35 km/week.
+  the data shows less (`selfReport`). Per distance `longNeed` (long run worth reaching: 7/11/16/28 km) and `minPeak`
+  (15/22/30/45 km/week) drive the feasibility check; the long run grows on its own (≤ +10%/week, ≤ half the week).
+  Beginners (not experienced, < 10 km/week): run/walk hint, start ~8 km/week; target-time check allows up to ~0.4
+  VDOT/week for runners without history (Milanović 2015). Below 25 km/week no hard sessions; warm-up/cool-down 2 km below 35 km/week.
   Flags: load spike (ACWR > 1.3), efficiency drop
   (fatigue), ≥ 14 days off. Feasibility (time, volume, long run, target VDOT) → status, Analysis advice and an
   alert() once when it turns infeasible after a new activity; `PLAN.log` keeps the last 20 updates. Every session
