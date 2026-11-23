@@ -726,6 +726,7 @@ function refresh(){
   $('#hrRest').value = P.hrRest; $('#aet').value = P.aet; $('#ant').value = P.ant;
   $('#hrMaxHint').textContent = PROFILE.hrMax ? `(from your Polar profile${est ? `; highest measured: ${est}` : ''})`
     : est ? `(estimated from your data: ${est}; adjust if you know your real max)` : '(no heart rate data found)';
+  RENDER_DAY = ymdStr(new Date());
   renderShoes(); renderTable();
   if (ACTS.length){ if (!CUR_RUN || !ACTS.includes(CUR_RUN)) showRun(ACTS[ACTS.length-1]); else showRun(CUR_RUN); }   // open on the newest activity
   renderPlan();
@@ -1556,7 +1557,13 @@ function buildPlan(now){
 
   // flags from the most recent days (they change the rest of this week)
   const acwr = mNow.chronic > 0 ? mNow.acute / mNow.chronic : null;
-  const spike = acwr != null && acwr > 1.3 && mNow.acute > 15;
+  // for an experienced runner a week within the volume sustained before is no spike, even when the 4-week average is
+  // low after a break: the ratio is a rough guide (Impellizzeri 2020) and week-to-week changes were not linked to
+  // injuries in a large cohort (Frandsen 2025)
+  const usualWeek = mWeek.experienced && mNow.acute <= mWeek.block * 1.1;
+  const spike = acwr != null && acwr > 1.3 && mNow.acute > 15 && !usualWeek;
+  if (acwr != null && acwr > 1.3 && mNow.acute > 15 && usualWeek)
+    reasons.push({t: `${fmtNum(mNow.acute, 0)} km in the last 7 days is well above your 4-week average (${fmtNum(mNow.chronic, 0)} km), but in line with the ${fmtNum(mWeek.block, 0)} km/week you sustained before, so it counts as a normal week, not as a load spike.`, src: ['FRANDSEN2025', 'IMPELLIZZERI2020']});
   const fatigue = mNow.effNow && mNow.effBase && mNow.nEff >= 2 && mNow.effNow < mNow.effBase * 0.95;
   const restart = mNow.daysSince != null && mNow.daysSince >= 14;
   if (spike) reasons.push({t: `Load spike: ${fmtNum(mNow.acute, 1)} km in the last 7 days is ${fmtNum(acwr, 1)}× your 4-week average. The rest of this week is easy and the long run does not grow.`, src: ['GABBETT2016', 'IMPELLIZZERI2020']});
@@ -1572,8 +1579,13 @@ function buildPlan(now){
   // after a short break an experienced runner resumes at ~70% of the volume before it, not at the (halved) 4-week
   // average: most of the fitness is still there after a few weeks off (Coyle 1984, Mujika 2000)
   const resume = exp && mWeek.prior > mWeek.chronic * 1.2 ? .7 * mWeek.prior : 0;
-  const base = Math.max(mWeek.chronic, resume);
-  if (resume > mWeek.chronic) reasons.push({t: `After your break the plan resumes at about 70% of the ${fmtNum(mWeek.prior, 0)} km/week you ran before it (${fmtNum(resume, 0)} km), not at your 4-week average of ${fmtNum(mWeek.chronic, 0)} km: a few weeks off cost only part of your fitness.`, src: ['COYLE1984', 'MUJIKA2000']});
+  // last full week counts too: an experienced runner continues from it (up to the volume sustained before),
+  // anyone else from at most 30% above the 4-week average
+  const lastWeek = mWeek.acute;
+  const fromLast = exp ? Math.min(lastWeek, block) : Math.min(lastWeek, mWeek.chronic * 1.3);
+  const base = Math.max(mWeek.chronic, resume, fromLast);
+  if (fromLast > Math.max(mWeek.chronic, resume) + 1) reasons.push({t: `The plan continues from last week's ${fmtNum(lastWeek, 0)} km${fromLast < lastWeek - 1 ? ` (counted as ${fmtNum(fromLast, 0)} km)` : ''} rather than from your 4-week average of ${fmtNum(mWeek.chronic, 0)} km.`, src: ['VANPOPPEL2021', 'NIELSEN2014']});
+  if (resume > mWeek.chronic && resume >= fromLast) reasons.push({t: `After your break the plan resumes at about 70% of the ${fmtNum(mWeek.prior, 0)} km/week you ran before it (${fmtNum(resume, 0)} km), not at your 4-week average of ${fmtNum(mWeek.chronic, 0)} km: a few weeks off cost only part of your fitness.`, src: ['COYLE1984', 'MUJIKA2000']});
   if (restart) reasons.push({t: `${Math.round(mNow.daysSince)} days without running: this week is easy only${resume > mWeek.chronic ? '' : ', and the volume starts from what you ran recently'}.`, src: ['NIELSEN2014']});
   let prev = Math.max(8, base), longPrev = Math.max(mWeek.longest30, base * .3, 4);   // a complete beginner starts at ~8 km/week
   PLAN_BEGINNER = !exp && mWeek.chronic < 10;
@@ -1925,7 +1937,17 @@ $('#pgDist').onchange = () => $('#pgKmBox').classList.toggle('hidden', $('#pgDis
 $('#pgCancel').onclick = () => { PLAN_EDIT = false; renderPlan(); };
 fillPlanForm();
 
+// the page can stay open for days (the app keeps it in memory): when the date has changed, recompute everything
+// that depends on 'today' – the plan's current week, days to the race, the advice – before showing it
+let RENDER_DAY = null;
+function catchUpDay(){
+  if (RENDER_DAY === ymdStr(new Date())) return;
+  if (ALL.length) refresh(); else { RENDER_DAY = ymdStr(new Date()); renderPlan(); }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUpDay(); });
+window.appResume = () => catchUpDay();
 function showView(v){
+  catchUpDay();
   if (v === 'run' && MAP) setTimeout(() => MAP.invalidateSize());
   if (APP && document.body.dataset.view !== v) APP.postMessage({cmd: 'view', view: v});   // keep the app's tab bar in step
   document.body.dataset.view = v;

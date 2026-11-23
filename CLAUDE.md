@@ -59,6 +59,9 @@ are in `CLAUDE.local.md`, which is not in git.
   the data shows less (`selfReport`). Per distance `longNeed` (long run worth reaching: 7/11/16/28 km) and `minPeak`
   (15/22/30/45 km/week) drive the feasibility check; the long run grows on its own (≤ +10%/week, ≤ half the week).
   After a short break (experienced, 4-week avg < 1/1.2 of weeks 5–8): start at 70% of the pre-break volume (`resume`).
+  The last full week counts too (`fromLast`: experienced up to the best 8-week block, others ≤ 1.3× the 4-week avg),
+  and for experienced runners a week ≤ 1.1× that block is no load spike (`usualWeek`). The page recomputes when the
+  date changed (`catchUpDay` on view switch, visibilitychange and the app's scenePhase → `appResume`).
   Peak ≥ longNeed / 0.5 so the long run (≤ half the week) can reach longNeed; when it still cannot, the status says
   whether weekly distance or the 10%-per-week growth limits it. Beginners (not experienced, < 10 km/week): run/walk hint, start ~8 km/week; target-time check allows up to ~0.4
   VDOT/week for runners without history (Milanović 2015). Below 25 km/week no hard sessions; warm-up/cool-down 2 km below 35 km/week.

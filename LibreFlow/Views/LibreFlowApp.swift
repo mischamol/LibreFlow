@@ -4,6 +4,7 @@ import WebKit
 @main
 struct LibreFlowApp: App {
     @StateObject private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -20,6 +21,8 @@ struct LibreFlowApp: App {
                     .tabItem { Label("Settings", systemImage: "gearshape") }.tag(3)
             }
             .onChange(of: model.tab) { _, t in model.showPageView(forTab: t) }
+            // back in the foreground (possibly days later): let the page recompute what depends on today's date
+            .onChange(of: scenePhase) { _, p in if p == .active { model.webView.evaluateJavaScript("window.appResume && appResume(); 0") } }
             .environmentObject(model)
             .environmentObject(model.sync)
             .environmentObject(StravaClient.shared)
