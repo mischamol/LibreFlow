@@ -33,6 +33,31 @@ are in `CLAUDE.local.md`, which is not in git.
   7 downhill skiing, 11 hiking, 15 strength training, 16 other outdoor, 23 swimming, 27 trail running, 64 body & mind,
   82 multisport, 83 other indoor, 126 core, 127 mobility static. Other ids (e.g. 38) are shown as "unknown".
 - Max speed (Flow's "max pace"): `00/STATS.BPB` field 2 {1 avg, 2 max} km/h; Flow `statistics SPEED max`.
+- Favorites (read-only research, 23 Nov 2026): `/U/0/FAV/<nn>/TST.BPB` = `PbTrainingSessionTarget` (cmaion
+  `training_session_target.proto`: 2 name, 6 exercise_target {1 type, 2 sport, 4 phases, 5 route id}) and `ID.BPB` =
+  {1 id, 2 last_modified, 3 created (PbSystemDateTime)}; `/U/0/FAVCACHE.DAT` is a fixed-size binary index (not
+  protobuf). Phased favorite decoded (from Polar Flow): exercise_target {1: 2 PHASED, 2: sport, 4: phases}, each
+  phase {1 name, 2 change 1=automatic, 3 goal {1 type 1=time, 2 PbDuration {h,m,s,ms}}, 4 intensity {1 type
+  1=sport (HR) zone, 2 zone {lower, upper}}, 5 repeat_count (extra repeats), 6 jump_index}; field 5 description.
+  FAVCACHE.DAT = one 176-byte record per FAV folder: [0] 1, [1] folder index, [2..47] name (zero padded),
+  [0x30] name length, [0x31] ? (1 for phased), [0x38] target type, [0x40] sport id, [0x58] route id,
+  [0x60] uint32 total minutes (phased) or metres (route), [0x64] 0 = minutes / 1 = metres (hypothesis).
+  Polar Flow rewrote FAV: new favorite at 00, existing one moved unchanged to 01, cache rebuilt in that order.
+  Write test OK (23 Nov 2026, `fav-put`): a copy of the Flow favorite renamed "LibreFlow test" in new folder FAV/02/
+  showed up on the watch, and the watch rebuilt FAVCACHE.DAT itself (3rd record: index 2, name, name length, the rest
+  identical; [0x31] = 1 for phased). So only TST.BPB + ID.BPB need writing. Still unknown: distance-goal and
+  speed-zone units, whether PUT overwrites an existing file, and whether a Polar Flow sync removes such favorites.
+  Pace zones: Polar Flow only offers pace zone 1–5 in a favorite; the limits live in the sport profile
+  /U/0/SPROF/<n>/PROFILE.BPB › 3 settings › 6 zone_limits › 2 speed_zone {1 lower, 2 upper} as float km/h (running =
+  profile 0). Plan paces usually fall outside the user's narrow zones, so the idea is phase names with the target pace
+  ("4:30/km – 1.6 km") plus distance goals / HR zones, without writing the sport profile. Next step (paused 23 Nov):
+  read a Flow favorite with distance phases + pace zone 4 (fav_dump3) to confirm distance units and zone encoding.
+  Zones write test OK (23 Nov 2026, `zones-put`): PUT overwrites an existing file; read-back identical; a training
+  recorded afterwards used the new limits. Each training stores the zones it used in `00/ZONES.BPB`
+  (`PbRecordedZones`: 1 HR zone {1 limits {lo, hi}, 2 time in zone}, 4 speed zone {1 limits {lo, hi km/h float},
+  2 time, 3 distance}); the app keeps it under Documents/watch/<id>/00/. Whether a Polar Flow sync restores the
+  Flow zones is still unknown.
+  Writing (PSFTP PUT) is possible (SDK `PolarBleLowLevelApi.writeFile`) but NOT allowed without the user's explicit OK.
 - Known caveats: altitude looks uncalibrated; BASE field 11 (~20 m) may be ascent or descent, not verified.
 - Strava: file upload (TCX, manual at strava.com/upload/select) is free; the API (direct upload) needs a paid
   subscription. Both supported; the user has no subscription. In the app every run has Export… (GPX file via `GPXWriter`, TCX without GPS); with Settings › Strava on (default off) it becomes To Strava… (API upload). Settings › Privacy
@@ -45,6 +70,14 @@ are in `CLAUDE.local.md`, which is not in git.
   older/newer, shoes choice, pace avg / max, running index vs. 8-week median), Analysis (advice at the top as compact
   expandable items with the top one open, KPIs, charts, deep analysis, predictions, records), All Activities (list),
   Running Plan (adaptive training plan, see below), Settings (Mac only: import, backup, HR settings, map, shoes).
+  Training zones (`ZONES` {hr: 6 bpm limits | null, pace: 5 s/km limits slow→fast | null}, null = automatic; store +
+  backups): auto HR from HRmax/rest/AeT/AnT (½max, AeT−10, AeT, mid, AnT, max), auto pace halfway between Daniels'
+  paces (zone 1 recovery … 5 interval). Edited in the web Settings card and the app's Settings › Heart rate ›
+  Training zones (`ZonesView`, bridge `appZones/appSetZones`); the plan shows each session's pace/HR zone.
+  Send zones to watch (`BLE/WatchZones.swift`, `ProfileZones.swift`, `PolarWatch.put` with acknowledged frames): read
+  /U/0/SPROF/0/PROFILE.BPB, preview old/new, write only after the user confirms (re-reads first, stops if changed),
+  read back; zone 1 lower / zone 5 upper kept from the watch; first profile read saved as Documents/zones-backup/
+  PROFILE-original.BPB (Restore). Byte-identical to `zones-put`, which was verified on the watch.
   Plan: goal {dist 5k/10k/10mi/half/marathon/custom (+km), date, optional time, days/week, long-run day} in `PLAN` (store + backups).
   `buildPlan()` recomputes everything from the actual running on every refresh (volume from the 4-week average,
   +≤10%/week, lighter week every 4th week anchored to `PLAN.created`, long run ≤ +10% of the longest in 30 days,
@@ -95,7 +128,12 @@ are in `CLAUDE.local.md`, which is not in git.
   (`devicectl device copy from --domain-type appDataContainer`).
 - `web/polar_ble.py` – scan/services/ls/get/pull/explore/training/decode, `all` (bulk download, resumable, `index.json` +
   `.compleet` markers, `--since`, `--max`) and `export` (-> `trainingen_json/`, `--full` adds GPS). Options `--debug`,
-  `--pair` (Windows only), `--sync`. Old Dutch names (`alles`, `exporteer`, `--vanaf`, `--volledig`) are aliases.
+  `--pair` (Windows only), `--sync`. `fav-put <addr> <dir> <nn>` is the only write: PUT of a new folder
+  /U/0/FAV/<nn>/ with TST.BPB + ID.BPB, refuses existing folders, asks to type WRITE (approved by the user for one
+  test on 23 Nov 2026; any further write use needs a new OK). `zones-put <addr> <backup> --hr 6 bpm --pace 4 min:sec`
+  replaces only settings›zone_limits HR/speed zones of /U/0/SPROF/0/PROFILE.BPB (refuses if the watch file differs from
+  the backup; zone 1 lower and zone 5 upper kept; reads back to verify; `--restore` writes the backup). Also needs
+  the user's explicit OK per use. Old Dutch names (`alles`, `exporteer`, `--vanaf`, `--volledig`) are aliases.
   Internal names in `horloge_data/` (`.compleet`, `gecontroleerde_dagen`) are kept for compatibility.
 
 ## Sources

@@ -50,6 +50,7 @@ struct SettingsView: View {
                     if editing {
                         Button("Apply") { apply() }
                     }
+                    NavigationLink { ZonesView() } label: { Label("Training zones", systemImage: "gauge.with.dots.needle.33percent") }
                 } header: { Text("Heart rate") } footer: {
                     Text("From your Polar profile when the import contains it. Easy = below the aerobic threshold, hard = above the anaerobic threshold. Used for zones, load and advice.")
                 }

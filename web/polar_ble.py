@@ -3,7 +3,10 @@
 Speaks Polar's PSFTP file protocol over BLE, as implemented in the open-source
 Polar BLE SDK (service 0xFEEE, RFC76 framing, PbPFtpOperation requests).
 
-Only GET operations are ever sent: this tool never writes to or deletes from the watch.
+Only GET operations are sent, with two explicit exceptions that each ask you to type WRITE first:
+`fav-put` writes one training favorite to a new folder /U/0/FAV/<nn>/, and `zones-put` replaces only the heart-rate
+and speed zone limits in the running sport profile (everything else in that file stays byte for byte the same).
+Nothing is ever deleted from the watch.
 
 Usage:
   python polar_ble.py scan
@@ -14,6 +17,9 @@ Usage:
   python polar_ble.py decode <file>                   (protobuf wire dump of a .BPB/.GZB)
   python polar_ble.py --sync all <address> [outdir] [--since YYYYMMDD] [--max N]   (download every training, resumable)
   python polar_ble.py export [indir] [outdir] [--full]   (downloaded trainings -> training-session-*.json)
+  python polar_ble.py --sync fav-put <address> <dir with TST.BPB + ID.BPB> <nn>   (WRITES one favorite; asks first)
+  python polar_ble.py --sync zones-put <address> <backup PROFILE.BPB> --hr 50,136,146,156,167,181 --pace 6:03,5:04,4:37,4:16
+                       (WRITES the zones of /U/0/SPROF/0/PROFILE.BPB; asks first)   … --restore writes the backup back
 (The old Dutch names alles/exporteer/--vanaf/--volledig still work.)
 Options: --debug (print raw frames), --pair (ask Windows to pair first)
 """
@@ -82,6 +88,11 @@ def pb_fields(buf):
         if f == 0:
             raise ValueError("field 0")
         yield f, wt, v
+
+
+def pb_op_put(path):
+    p = path.encode()
+    return b"\x08" + varint(1) + b"\x12" + varint(len(p)) + p   # PbPFtpOperation{command=PUT, path}
 
 
 def pb_op_get(path):
@@ -198,12 +209,12 @@ class Pftp:
     async def request(self, header, timeout=30):
         return await self.request_raw(struct.pack("<H", len(header) & 0x7FFF) + header, timeout)
 
-    async def request_raw(self, stream, timeout=30):
+    async def request_raw(self, stream, timeout=30, acked=False):
         while not self.q.empty():
             self.q.get_nowait()
         for f in self.frames(stream):
             log("->", f.hex())
-            await self.c.write_gatt_char(MTU_CH, f, response=False)
+            await self.c.write_gatt_char(MTU_CH, f, response=acked)   # acked: wait for each frame (writes)
         out, exp_seq, n = bytearray(), 0, 0
         while True:
             pkt = await asyncio.wait_for(self.q.get(), timeout)
@@ -255,6 +266,12 @@ class Pftp:
         await self.notify(1, b"\x08\x01")   # STOP_SYNC {completed: true}
         await self.notify(9)                # TERMINATE_SESSION
         print("  sync session finished", file=sys.stderr)
+
+    async def put(self, path, data=b"", timeout=60):
+        """PUT a file (or, with a path ending in '/' and no data, create a folder), as Polar BLE SDK's
+        BlePsFtpClient.write: RFC60 header length + PbPFtpOperation + file data in one RFC76 stream."""
+        header = pb_op_put(path)
+        return await self.request_raw(struct.pack("<H", len(header) & 0x7FFF) + header + data, timeout, acked=True)
 
     async def get(self, path, timeout=60):
         return await self.request(pb_op_get(path), timeout)
@@ -385,6 +402,171 @@ async def cmd_get(args):
         with open(out, "wb") as f:
             f.write(data)
         print(f"{len(data)} bytes -> {out}")
+    await with_pftp(args, run)
+
+
+async def cmd_fav_put(args):
+    """Write ONE training favorite (TST.BPB + ID.BPB) into a new folder /U/0/FAV/<nn>/. Refuses existing folders,
+    other paths and anything but those two files, and asks you to type WRITE first."""
+    slot = args.slot
+    if not (len(slot) == 2 and slot.isdigit()):
+        sys.exit("slot must be two digits, e.g. 02")
+    files = []
+    for name in ("TST.BPB", "ID.BPB"):
+        fp = os.path.join(args.dir, name)
+        if not os.path.isfile(fp):
+            sys.exit(f"missing {fp}")
+        with open(fp, "rb") as f:
+            data = f.read()
+        if not 0 < len(data) <= 4096:
+            sys.exit(f"{fp}: unexpected size {len(data)}")
+        files.append((name, data))
+    folder = f"/U/0/FAV/{slot}/"
+
+    async def run(p):
+        existing = [n for n, _ in await p.ls("/U/0/FAV/")]
+        print("/U/0/FAV/ now:", " ".join(existing) or "(empty)")
+        if f"{slot}/" in existing:
+            print(f"{folder} already exists: nothing written.")
+            return
+        print("About to WRITE to the watch:")
+        print(f"  create folder {folder}")
+        for name, data in files:
+            print(f"  {folder}{name}  ({len(data)} bytes)")
+        if input("Type WRITE to continue: ").strip() != "WRITE":
+            print("Cancelled: nothing written.")
+            return
+        await p.put(folder)
+        for name, data in files:
+            await p.put(folder + name, data)
+            print(f"  written {folder}{name}")
+        print(f"{folder} now:", " ".join(f"{n} {s}" for n, s in await p.ls(folder)))
+    await with_pftp(args, run)
+
+
+# ---------- sport profile zones (zones-put) ----------
+def pb_split(b):
+    """[(field, raw bytes of the whole field, value or payload)] in original order (varint / length / fixed only)"""
+    i, out = 0, []
+    while i < len(b):
+        start = i
+        k, i = read_varint(b, i)
+        f, t = k >> 3, k & 7
+        if t == 0:
+            v, i = read_varint(b, i)
+        elif t == 2:
+            n, i = read_varint(b, i); v = b[i:i + n]; i += n
+        elif t == 5:
+            v = b[i:i + 4]; i += 4
+        elif t == 1:
+            v = b[i:i + 8]; i += 8
+        else:
+            raise ValueError(f"unsupported wire type {t} at byte {start}")
+        out.append((f, b[start:i], v))
+    return out
+
+
+def pb_ld(f, payload):
+    return varint(f << 3 | 2) + varint(len(payload)) + payload
+
+
+def profile_info(b):
+    """sport id, heart-rate zones [(lo, hi)] and speed zones [(lo, hi)] km/h of a PbSportProfile"""
+    sport = next(v for f, _, v in pb_split(next(v for f, _, v in pb_split(b) if f == 2)) if f == 1)
+    st = next(v for f, _, v in pb_split(b) if f == 3)
+    zl = next(v for f, _, v in pb_split(st) if f == 6)
+    hr, sp = [], []
+    for f, _, v in pb_split(zl):
+        if f in (1, 2):
+            d = {ff: vv for ff, _, vv in pb_split(v)}
+            hr.append((d[1], d[2])) if f == 1 else sp.append((struct.unpack("<f", d[1])[0], struct.unpack("<f", d[2])[0]))
+    return sport, hr, sp
+
+
+def profile_with_zones(b, hr, sp):
+    """Same profile with new zone limits: settings(3) › zone_limits(6) › heart_rate_zone(1) / speed_zone(2) are
+    replaced in place; every other field (and the order of fields) is copied byte for byte."""
+    def zl_new(zl):
+        out, put_hr, put_sp = b"", False, False
+        for f, raw, v in pb_split(zl):
+            if f == 1:
+                if not put_hr:
+                    out += b"".join(pb_ld(1, b"\x08" + varint(lo) + b"\x10" + varint(hi)) for lo, hi in hr); put_hr = True
+            elif f == 2:
+                if not put_sp:
+                    out += b"".join(pb_ld(2, b"\x0d" + struct.pack("<f", lo) + b"\x15" + struct.pack("<f", hi)) for lo, hi in sp); put_sp = True
+            else:
+                out += raw
+        return out
+    st_new = lambda st: b"".join(pb_ld(6, zl_new(v)) if f == 6 else raw for f, raw, v in pb_split(st))
+    return b"".join(pb_ld(3, st_new(v)) if f == 3 else raw for f, raw, v in pb_split(b))
+
+
+def parse_zone_args(args, cur_hr, cur_sp):
+    """--hr: 6 bpm limits; --pace: 4 limits min:sec/km between zones 1|2 … 4|5. Zone 1 starts and zone 5 ends
+    where they do now on the watch (so walking still counts as zone 1)."""
+    hr = sp = None
+    if args.hr:
+        v = [int(x) for x in args.hr.split(",")]
+        if len(v) != 6 or any(b <= a for a, b in zip(v, v[1:])) or not (30 <= v[0] and v[-1] <= 240):
+            sys.exit("--hr needs 6 rising heart rates, e.g. 50,136,146,156,167,181")
+        hr = list(zip(v, v[1:]))
+    if args.pace:
+        secs = []
+        for t in args.pace.split(","):
+            m, s_ = t.split(":")
+            secs.append(int(m) * 60 + int(s_))
+        if len(secs) != 4 or any(b >= a for a, b in zip(secs, secs[1:])) or not (120 <= secs[-1] and secs[0] <= 1200):
+            sys.exit("--pace needs 4 paces from slow to fast, e.g. 6:03,5:04,4:37,4:16")
+        kmh = [cur_sp[0][0]] + [3600 / x for x in secs] + [cur_sp[-1][1]]
+        sp = list(zip(kmh, kmh[1:]))
+    return hr if hr is not None else cur_hr, sp if sp is not None else cur_sp
+
+
+def fmt_zones(hr, sp):
+    pace = lambda k: "" if k >= 300 else f"{int(60 / k)}:{round(3600 / k % 60):02d}"
+    return (["  heart rate: " + "  ".join(f"{a}-{b}" for a, b in hr),
+             "  speed km/h: " + "  ".join(f"{a:.2f}-{b:.2f}" for a, b in sp),
+             "  pace /km  : " + "  ".join(f"{pace(b) or 'faster'}..{pace(a)}" for a, b in sp)])
+
+
+async def cmd_zones_put(args):
+    """Replace the zones of the running sport profile, or with --restore put the backup back. Reads first, checks
+    the file against the backup, shows old and new, asks you to type WRITE, writes, and reads it back."""
+    path = f"/U/0/SPROF/{args.slot}/PROFILE.BPB"
+    with open(args.backup, "rb") as f:
+        backup = f.read()
+    sport, b_hr, b_sp = profile_info(backup)
+    if sport != 1:
+        sys.exit(f"{args.backup} is not the running profile (sport id {sport})")
+    if args.restore and (args.hr or args.pace):
+        sys.exit("--restore cannot be combined with --hr / --pace")
+
+    async def run(p):
+        cur = await p.get(path, timeout=60)
+        c_sport, c_hr, c_sp = profile_info(cur)
+        if c_sport != 1:
+            print(f"{path} is not the running profile (sport id {c_sport}): nothing written."); return
+        if args.restore:
+            new = backup
+        else:
+            if cur != backup:
+                print(f"{path} differs from {args.backup} (changed on the watch?): nothing written."); return
+            hr, sp = parse_zone_args(args, c_hr, c_sp)
+            new = profile_with_zones(cur, hr, sp)
+            if profile_info(new)[1:] != (hr, [(struct.unpack("<f", struct.pack("<f", a))[0], struct.unpack("<f", struct.pack("<f", b))[0]) for a, b in sp]):
+                print("internal check failed: nothing written."); return
+        if new == cur:
+            print("The watch already has these zones: nothing written."); return
+        print(f"{path}  ({len(cur)} -> {len(new)} bytes)")
+        print("now on the watch:"); print("\n".join(fmt_zones(c_hr, c_sp)))
+        _, n_hr, n_sp = profile_info(new)
+        print("after writing:"); print("\n".join(fmt_zones(n_hr, n_sp)))
+        if input("Type WRITE to continue: ").strip() != "WRITE":
+            print("Cancelled: nothing written."); return
+        await p.put(path, new)
+        back = await p.get(path, timeout=60)
+        print("written and read back:", "identical, OK" if back == new else f"DIFFERENT ({len(back)} bytes) – keep the backup at hand")
     await with_pftp(args, run)
 
 
@@ -722,6 +904,14 @@ def main():
     s = sub.add_parser("get"); s.add_argument("address"); s.add_argument("path"); s.add_argument("outfile", nargs="?")
     s = sub.add_parser("pull"); s.add_argument("address"); s.add_argument("path"); s.add_argument("outdir"); s.add_argument("--depth", type=int, default=6)
     s = sub.add_parser("decode"); s.add_argument("file")
+    s = sub.add_parser("zones-put", help="WRITE the heart-rate / pace zones of the running profile (asks first)")
+    s.add_argument("address"); s.add_argument("backup", help="PROFILE.BPB downloaded earlier (must match the watch)")
+    s.add_argument("--hr", help="6 heart-rate limits, e.g. 50,136,146,156,167,181")
+    s.add_argument("--pace", help="4 pace limits from slow to fast (min:sec per km), e.g. 6:03,5:04,4:37,4:16")
+    s.add_argument("--slot", default="0", help="sport profile folder (default 0 = running)")
+    s.add_argument("--restore", action="store_true", help="write the backup file back unchanged")
+    s = sub.add_parser("fav-put", help="WRITE one training favorite to /U/0/FAV/<nn>/ (asks first)")
+    s.add_argument("address"); s.add_argument("dir"); s.add_argument("slot")
     s = sub.add_parser("training"); s.add_argument("dir")
     s = sub.add_parser("explore"); s.add_argument("address"); s.add_argument("outdir", nargs="?", default="horloge_dump")
     s = sub.add_parser("all", aliases=["alles"], help="download every training (resumable)")
@@ -743,7 +933,7 @@ def main():
     from bleak import BleakScanner as _S, BleakClient as _C
     BleakScanner, BleakClient = _S, _C
     try:
-        asyncio.run(globals()["cmd_" + args.cmd](args))
+        asyncio.run(globals()["cmd_" + args.cmd.replace("-", "_")](args))
     except PftpError as e:
         sys.exit(str(e))
     except asyncio.TimeoutError:

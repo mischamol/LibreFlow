@@ -204,6 +204,33 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
     func refreshSettings() async {
         if let d = await call("return window.appSettings ? appSettings() : null") as? [String: Any] { settings = PageSettings(d) }
     }
+    // MARK: training zones (kept in the analysis page; see Settings › Training zones)
+    struct Zones {
+        var hr: [Int] = []          // 6 limits in bpm, ascending (zone n = hr[n-1] ... hr[n])
+        var pace: [Int] = []        // 5 limits in s/km from slow to fast (zone 5 = faster than pace[4])
+        var hrAuto = true, paceAuto = true
+        var vdot: Double?
+        var error: String?
+        init() {}
+        init(_ d: [String: Any]) {
+            hr = (d["hr"] as? [NSNumber] ?? []).map(\.intValue)
+            pace = (d["pace"] as? [NSNumber] ?? []).map(\.intValue)
+            hrAuto = d["hrAuto"] as? Bool ?? true; paceAuto = d["paceAuto"] as? Bool ?? true
+            vdot = (d["V"] as? NSNumber)?.doubleValue
+            error = d["error"] as? String
+        }
+    }
+    func loadZones() async -> Zones? {
+        (await call("return window.appZones ? appZones() : null") as? [String: Any]).map(Zones.init)
+    }
+    /// nil = leave as is; .some(nil) = automatic; .some(limits) = set by hand. Returns the zones now in use (or an error).
+    func setZones(hr: [Int]?? = nil, pace: [Int]?? = nil) async -> Zones? {
+        var o: [String: Any] = [:]
+        if let hr { o["hr"] = hr.map { $0 as Any } ?? NSNull() }
+        if let pace { o["pace"] = pace.map { $0 as Any } ?? NSNull() }
+        return (await call("return appSetZones(o)", ["o": o]) as? [String: Any]).map(Zones.init)
+    }
+
     func applySettings(hrMax: Int? = nil, hrRest: Int? = nil, aet: Int? = nil, ant: Int? = nil, sports: [String]? = nil) async {
         var o: [String: Any] = [:]
         if let hrMax { o["hrMax"] = hrMax }; if let hrRest { o["hrRest"] = hrRest }

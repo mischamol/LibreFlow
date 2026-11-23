@@ -55,6 +55,10 @@ That is why LibreFlow keeps **all data local**:
 - **Settings**: import (Polar export ZIP, backup, JSON), make backup (a ZIP with the summary and the raw data:
   per-second series and GPS route of every activity), CSV, demo data, heart rate and thresholds, shoes, privacy,
   Strava, forget watch, delete data.
+- **Settings › Training zones**: five heart-rate and five pace zones, automatic (from your heart-rate settings and
+  current fitness) or set by hand; the running plan shows which zone each session falls in. *Send zones to watch…*
+  reads the running profile from the watch, shows the zones now and after the change, and only after you confirm
+  writes nothing but the zone limits (with a backup and *Restore original zones…*).
 - **Settings › Privacy**: include heart rate (**off** by default) and the GPS route (on) in exports and uploads;
   *Show map* (on): routes on OpenStreetMap – the only internet access the analysis has; off = route drawn without
   a map.

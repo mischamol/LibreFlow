@@ -188,6 +188,19 @@ ol{padding-left:20px}
     <div class="sports" id="sports" style="margin-top:10px"></div>
     <label style="display:block;margin-top:10px"><input type="checkbox" id="mapOn"> Show routes on a map (map tiles are loaded from OpenStreetMap; off = route drawn without map background, nothing loaded)</label>
   </section>
+  <section class="card" id="zonesCard">
+    <h2>Training zones</h2>
+    <p class="hint">Used in the running plan; later they can also be sent to the watch. Edit the limits, or leave them automatic.</p>
+    <div class="grid">
+      <div><h2 style="font-size:15px">Heart rate</h2>
+        <label><input type="checkbox" id="zHrAuto"> Automatic (from max and resting heart rate and the two thresholds)</label>
+        <table style="margin-top:6px;width:auto"><tbody id="zHrTbl"></tbody></table></div>
+      <div><h2 style="font-size:15px">Pace</h2>
+        <label><input type="checkbox" id="zPaceAuto"> Automatic</label> <span class="hint" id="zPaceHint"></span>
+        <table style="margin-top:6px;width:auto"><tbody id="zPaceTbl"></tbody></table></div>
+    </div>
+    <div class="row" style="margin-top:8px"><button id="zSave" class="primary">Save zones</button><span class="hint" id="zMsg" style="margin:0"></span></div>
+  </section>
   <section class="card" id="shoesCard">
     <div class="row" style="justify-content:space-between">
       <div><h2>Shoes</h2><p class="hint" style="margin:0">Distance per pair. Runs count for the default shoes of their sport from the date the shoes are in use; change it per activity with Edit.</p></div>
@@ -568,6 +581,7 @@ async function importEntries(entries){
         if (Array.isArray(j.gear) && !GEAR.length){ GEAR = j.gear; ASSIGN = {...(j.assign || {}), ...ASSIGN}; }
         EDITS = {...(j.edits || {}), ...EDITS}; (j.deleted || []).forEach(k => DELETED.add(k));
         if (j.plan?.goal && !PLAN?.goal) PLAN = j.plan;
+        if (j.zones && !ZONES.hr && !ZONES.pace) ZONES = {hr: j.zones.hr || null, pace: j.zones.pace || null};
         continue;
       }
       for (const x of (Array.isArray(j) ? j : [j])){
@@ -616,7 +630,7 @@ function dedupe(list){
 const FIELDS = ['sport','km','sec','hrAvg','hrMax','ascent','kcal','cad','ri','vmax','load','name','deep','wid'];
 const BACKUP_FORMAT = 'libreflow-backup', OLD_BACKUP_FORMATS = ['run-analysis-backup', 'hardloop-analyse-backup'];
 const APP = window.webkit?.messageHandlers?.libreflow;   // running inside the iPhone app
-const pack = withSeries => JSON.stringify({v: 2, format: BACKUP_FORMAT, hrMax: userHrMax, profile: PROFILE, gear: GEAR, assign: ASSIGN, edits: EDITS, deleted: [...DELETED], anaSport: ANA_SPORT, plan: PLAN, sessions: ALL.map(s => {
+const pack = withSeries => JSON.stringify({v: 2, format: BACKUP_FORMAT, hrMax: userHrMax, profile: PROFILE, gear: GEAR, assign: ASSIGN, edits: EDITS, deleted: [...DELETED], anaSport: ANA_SPORT, plan: PLAN, zones: ZONES, sessions: ALL.map(s => {
   const o = {date: s.date.getTime()}; for (const f of FIELDS) if (s[f] != null) o[f] = s[f];
   if (o.deep && !withSeries){ o.deep = {...o.deep}; delete o.deep.s; }
   return o; })});
@@ -639,7 +653,7 @@ function loadStore(){
     const j = JSON.parse((APP ? window.__LIBREFLOW_STORE : localStorage.getItem(STORE)) || 'null');
     if (!j || !Array.isArray(j.sessions)) return null;
     return {sessions: j.sessions.map(s => ({...s, date: new Date(s.date)})), hrMax: j.hrMax || null, profile: j.profile || {},
-      gear: Array.isArray(j.gear) ? j.gear : [], assign: j.assign || {}, edits: j.edits || {}, deleted: j.deleted || [], anaSport: j.anaSport, plan: j.plan || null};
+      gear: Array.isArray(j.gear) ? j.gear : [], assign: j.assign || {}, edits: j.edits || {}, deleted: j.deleted || [], anaSport: j.anaSport, plan: j.plan || null, zones: j.zones || null};
   } catch { return null; }
 }
 try { for (const k of OLD_STORES) if (!localStorage.getItem(STORE) && localStorage.getItem(k)){ localStorage.setItem(STORE, localStorage.getItem(k)); localStorage.removeItem(k); } } catch {}
@@ -649,7 +663,7 @@ function clearStore(skipConfirm){
   if (APP) APP.postMessage({cmd: 'store', text: ''});
   try { localStorage.removeItem(STORE); } catch {}
   RAW.clear();
-  ALL = []; RUNS = []; ACTS = []; userHrMax = null; isDemo = false; PROFILE = {}; GEAR = []; ASSIGN = {}; EDITS = {}; DELETED = new Set(); PLAN = null;
+  ALL = []; RUNS = []; ACTS = []; userHrMax = null; isDemo = false; PROFILE = {}; GEAR = []; ASSIGN = {}; EDITS = {}; DELETED = new Set(); PLAN = null; ZONES = {hr: null, pace: null};
   Object.values(charts).forEach(c => c.destroy()); charts = {};
   $('#app').classList.add('hidden');
   $('#appEmpty').classList.remove('hidden');
@@ -714,6 +728,7 @@ function estimateHrMax(runs){
 }
 
 function refresh(){
+  ZCACHE = null;   // automatic zones follow the data
   ALL.forEach(s => s.pace = s.km > 0 ? s.sec / s.km : null);
   ACTS = ALL;                                                   // Latest Activity / All Activities: every sport
   RUNS = ANA_SPORT ? ALL.filter(s => s.sport === ANA_SPORT) : ALL;   // Analysis: all activities or one sport
@@ -729,7 +744,7 @@ function refresh(){
   RENDER_DAY = ymdStr(new Date());
   renderShoes(); renderTable();
   if (ACTS.length){ if (!CUR_RUN || !ACTS.includes(CUR_RUN)) showRun(ACTS[ACTS.length-1]); else showRun(CUR_RUN); }   // open on the newest activity
-  renderPlan();
+  renderPlan(); renderZones();
   if (!RUNS.length){ $('#kpis').innerHTML = '<p>No activities for this selection.</p>'; return; }
   const A = analyse(RUNS);
   renderKpis(A); renderAdvice(A); renderCharts(A); renderDeep(A); renderPred(A); renderRecords(A);
@@ -1539,6 +1554,78 @@ function selfReport(m, at){
   if (s.m && s.sec && age < 120){ const v = vdot(s.m, s.sec); if (!m.V || v > m.V){ m.V = v; m.self = m.selfV = true; } }
 }
 
+/* ---------- training zones (heart rate and pace), 5 each ----------
+   Automatic by default: heart-rate zones from max / resting HR and the two thresholds, pace zones from the current
+   fitness (VDOT, Daniels): 1 recovery, 2 easy (E), 3 marathon (M), 4 threshold (T), 5 interval (I). Each can be set
+   by hand; stored as boundaries (hr: 6 bpm values ascending, pace: 5 s/km values from slow to fast, zone 5 open). */
+let ZONES = {hr: null, pace: null};
+function zonesVdot(){
+  const runs = ALL.filter(s => isRunSport(s.sport) && s.date > Date.now() - 120 * DAY);
+  const vs = runs.map(runVdot).filter(Boolean);
+  return vs.length ? Math.max(...vs) : null;
+}
+function autoHrBounds(){
+  const p = prof(), mid = Math.round((p.aet + p.ant) / 2);
+  return [Math.round(p.hrMax * .5), p.aet - 10, p.aet, mid, p.ant, p.hrMax];
+}
+function autoPaceBounds(V){
+  const pc = planPaces(V || 40);
+  const r = x => Math.round(x);
+  // limits halfway between Daniels' paces, so each pace sits in the middle of its zone
+  return [r(pc.E[1] + 90), r(pc.E[1] + 10), r((pc.E[0] + pc.M) / 2), r((pc.M + pc.T) / 2), r((pc.T + pc.I) / 2)];   // slow → fast
+}
+let ZCACHE = null;   // zones() is called for every session in the plan: compute once per data / settings / day
+function zones(){
+  const p = prof(), key = [ALL.length, ALL.length && +ALL[ALL.length - 1].date, JSON.stringify(ZONES), ymdStr(new Date()), p.hrMax, p.hrRest, p.aet, p.ant].join('|');
+  if (ZCACHE?.key === key) return ZCACHE.v;
+  const V = zonesVdot();
+  const v = {hr: ZONES.hr || autoHrBounds(), pace: ZONES.pace || autoPaceBounds(V), hrAuto: !ZONES.hr, paceAuto: !ZONES.pace, V};
+  ZCACHE = {key, v};
+  return v;
+}
+const hrZoneOf = h => { const b = zones().hr; for (let z = 5; z >= 1; z--) if (h >= b[z - 1]) return z; return 1; };
+const paceZoneOf = sec => { const b = zones().pace; for (let z = 5; z >= 2; z--) if (sec <= b[z - 1]) return z; return 1; };
+function checkHrBounds(b){
+  if (!Array.isArray(b) || b.length !== 6 || !b.every(x => Number.isFinite(+x) && +x >= 30 && +x <= 240)) return 'Heart-rate limits must be numbers between 30 and 240.';
+  for (let i = 1; i < 6; i++) if (+b[i] <= +b[i - 1]) return 'Each heart-rate zone must end above where it starts.';
+  return null;
+}
+function checkPaceBounds(b){
+  if (!Array.isArray(b) || b.length !== 5 || !b.every(x => Number.isFinite(+x) && +x >= 120 && +x <= 1200)) return 'Pace limits must be between 2:00 and 20:00 per km.';
+  for (let i = 1; i < 5; i++) if (+b[i] >= +b[i - 1]) return 'Each faster pace zone must start at a faster pace than the one before.';
+  return null;
+}
+function setZones(o){   // {hr: bounds|null, pace: bounds|null}; undefined keeps the current value
+  if (o.hr !== undefined){ if (o.hr){ const e = checkHrBounds(o.hr); if (e) return e; ZONES.hr = o.hr.map(Number); } else ZONES.hr = null; }
+  if (o.pace !== undefined){ if (o.pace){ const e = checkPaceBounds(o.pace); if (e) return e; ZONES.pace = o.pace.map(Number); } else ZONES.pace = null; }
+  saveStore();
+  if (ALL.length) refresh(); else renderPlan();
+  renderZones();
+  return null;
+}
+const fmtMs = s => `${Math.floor(s / 60)}:${pad(Math.round(s % 60))}`;
+const parseMs = t => { const m = /^\s*(\d{1,2}):([0-5]\d)\s*$/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : NaN; };
+function renderZones(){
+  const el = $('#zonesCard'); if (!el) return;
+  const z = zones();
+  const hrRows = [1, 2, 3, 4, 5].map(i => `<tr><td>Zone ${i}</td><td><input type="number" class="zHr" data-i="${i - 1}" value="${z.hr[i - 1]}" ${z.hrAuto ? 'disabled' : ''} style="width:70px"></td>` +
+    `<td>–</td><td>${i === 5 ? `<input type="number" class="zHr" data-i="5" value="${z.hr[5]}" ${z.hrAuto ? 'disabled' : ''} style="width:70px">` : z.hr[i]}</td><td class="hint">bpm</td></tr>`).join('');
+  const names = ['recovery', 'easy (E)', 'marathon (M)', 'threshold (T)', 'interval (I)'];
+  const paceRows = [1, 2, 3, 4, 5].map(i => `<tr><td>Zone ${i}</td><td class="hint">${names[i - 1]}</td>` +
+    `<td>${i === 5 ? 'faster' : `<input type="text" class="zPace" data-i="${i}" value="${fmtMs(z.pace[i])}" ${z.paceAuto ? 'disabled' : ''} style="width:70px">`}</td><td>–</td>` +
+    `<td>${i === 1 ? `<input type="text" class="zPace" data-i="0" value="${fmtMs(z.pace[0])}" ${z.paceAuto ? 'disabled' : ''} style="width:70px">` : fmtMs(z.pace[i - 1])}</td><td class="hint">min/km</td></tr>`).join('');
+  $('#zHrTbl').innerHTML = hrRows; $('#zPaceTbl').innerHTML = paceRows;
+  $('#zHrAuto').checked = z.hrAuto; $('#zPaceAuto').checked = z.paceAuto;
+  $('#zPaceHint').textContent = z.V ? `Automatic: from your current fitness (VDOT ${fmtNum(z.V, 1)}), following Daniels' training paces.` : 'Automatic: no run of 3 km or more in the last 120 days, so a default fitness is used.';
+  $('#zMsg').textContent = '';
+}
+function readZoneInputs(){
+  const cur = zones();
+  const hrB = cur.hr.slice(); document.querySelectorAll('.zHr').forEach(x => hrB[+x.dataset.i] = +x.value);
+  const paceB = cur.pace.slice(); document.querySelectorAll('.zPace').forEach(x => paceB[+x.dataset.i] = parseMs(x.value));
+  return {hrB, paceB};
+}
+
 function buildPlan(now){
   const g = PLAN.goal, G = goalSpec(g), today = dayStart(now), race = ymdDate(g.date);
   const wk0 = monday(today), raceWk = monday(race), created = new Date(PLAN.created);
@@ -1758,6 +1845,12 @@ function describe(x, G, pc, goalPace){
       ['DANIELS'], 'r'],
   }[x.type];
   [x.title, x.detail, x.why, x.src, x.cls] = T;
+  // which of your training zones the key pace falls in (zones are set under Settings › Training zones)
+  if (pc){
+    const key = {easy: (pc.E[0] + pc.E[1]) / 2, strides: (pc.E[0] + pc.E[1]) / 2, medium: (pc.E[0] + pc.E[1]) / 2, long: (pc.E[0] + pc.E[1]) / 2,
+      threshold: pc.T, intervals: pc.I, longM: pc.M, longFast: pc.T, racepace: goalPace}[x.type];
+    if (key) x.detail += ` Pace zone ${paceZoneOf(key)}${['easy', 'strides', 'medium', 'long'].includes(x.type) ? `, heart-rate zone ${hrZoneOf(P.aet - 1) === 1 ? '1' : `1–${hrZoneOf(P.aet - 1)}`}` : ''}.`;
+  }
   if (PLAN_BEGINNER && ['easy', 'strides', 'long'].includes(x.type))
     x.detail += ' New to running? Alternate 1–2 min running with 1–2 min walking for this distance, and run a bit more of it every week; skip the strides until you can run 20 minutes without stopping.';
 }
@@ -1856,12 +1949,14 @@ function renderPlan(){
   // paces
   if (o.pc){
     $('#planPaceHint').innerHTML = `From your current VDOT ${fmtNum(m.V, 1)}; they change when your fitness does${cite(['DANIELS'])}.`;
-    $('#planPaces').innerHTML = `<table><tr><th>Pace</th><th>min/km</th><th>Use</th></tr>` +
-      `<tr><td>Easy (E)</td><td>${fmtPace(o.pc.E[0])} – ${fmtPace(o.pc.E[1])}</td><td>easy, medium-long and long runs</td></tr>` +
-      `<tr><td>Marathon (M)</td><td>${fmtPace(o.pc.M)}</td><td>marathon-pace blocks</td></tr>` +
-      `<tr><td>Threshold (T)</td><td>${fmtPace(o.pc.T)}</td><td>threshold intervals</td></tr>` +
-      `<tr><td>Interval (I)</td><td>${fmtPace(o.pc.I)}</td><td>intervals</td></tr>` +
-      (o.goalPace ? `<tr><td>Goal</td><td>${fmtPace(o.goalPace)}</td><td>race pace${o.target ? '' : ' (predicted)'}</td></tr>` : '') + '</table>';
+    const zc = sec => `<td>${paceZoneOf(sec)}</td>`;
+    $('#planPaces').innerHTML = `<table><tr><th>Pace</th><th>min/km</th><th>Zone</th><th>Use</th></tr>` +
+      `<tr><td>Easy (E)</td><td>${fmtPace(o.pc.E[0])} – ${fmtPace(o.pc.E[1])}</td>${zc((o.pc.E[0] + o.pc.E[1]) / 2)}<td>easy, medium-long and long runs</td></tr>` +
+      `<tr><td>Marathon (M)</td><td>${fmtPace(o.pc.M)}</td>${zc(o.pc.M)}<td>marathon-pace blocks</td></tr>` +
+      `<tr><td>Threshold (T)</td><td>${fmtPace(o.pc.T)}</td>${zc(o.pc.T)}<td>threshold intervals</td></tr>` +
+      `<tr><td>Interval (I)</td><td>${fmtPace(o.pc.I)}</td>${zc(o.pc.I)}<td>intervals</td></tr>` +
+      (o.goalPace ? `<tr><td>Goal</td><td>${fmtPace(o.goalPace)}</td>${zc(o.goalPace)}<td>race pace${o.target ? '' : ' (predicted)'}</td></tr>` : '') + '</table>' +
+      `<p class="hint" style="margin:8px 0 0">Zone = your pace zone (Settings › Training zones${zones().paceAuto ? ', now automatic' : ', set by you'}).</p>`;
   } else { $('#planPaceHint').textContent = 'No run of 3 km or more in the last 120 days: run by feel and heart rate until there is one.'; $('#planPaces').innerHTML = ''; }
   $('#planSources').innerHTML = PLAN_SRC_KEYS.map(k => `<li id="psrc-${k}">${escH(PLAN_SRC[k])}</li>`).join('');
 
@@ -1887,6 +1982,15 @@ function renderPlan(){
       : '<p class="hint" style="margin:0">No updates yet: they appear here after your next activity.</p>');
 }
 
+$('#zHrAuto').onchange = e => { setZones({hr: e.target.checked ? null : zones().hr}); };
+$('#zPaceAuto').onchange = e => { setZones({pace: e.target.checked ? null : zones().pace}); };
+$('#zSave').onclick = () => {
+  const {hrB, paceB} = readZoneInputs(), z = zones();
+  const err = setZones({hr: z.hrAuto ? undefined : hrB, pace: z.paceAuto ? undefined : paceB});
+  $('#zMsg').textContent = err || 'Zones saved.';
+};
+window.appZones = () => zones();
+window.appSetZones = o => { const error = setZones(o); return {...zones(), error}; };
 let PLAN_EDIT = false;
 // time as three number fields (an iPhone number keyboard has no ':'); null = empty, false = invalid
 function getHms(id){
@@ -2058,11 +2162,13 @@ else if (stored && stored.sessions.length){
   userHrMax = stored.hrMax; PROFILE = stored.profile; GEAR = stored.gear; ASSIGN = stored.assign; EDITS = stored.edits; DELETED = new Set(stored.deleted);
   if (typeof stored.anaSport === 'string') ANA_SPORT = stored.anaSport;   // last sport chosen in Analysis
   if (stored.plan?.goal) PLAN = stored.plan;
+  if (stored.zones) ZONES = {hr: stored.zones.hr || null, pace: stored.zones.pace || null};
   start(stored.sessions);
   status(`${ALL.length} stored trainings loaded. New imports are added.`);
 } else {
   if (stored?.plan?.goal) PLAN = stored.plan;   // a plan can exist without any trainings
-  renderPlan();
+  if (stored?.zones) ZONES = {hr: stored.zones.hr || null, pace: stored.zones.pace || null};
+  renderPlan(); renderZones();
   $('#appEmpty').classList.remove('hidden');
   if (!APP) showView(PLAN ? 'plan' : 'settings');   // nothing yet: start at Import
 }

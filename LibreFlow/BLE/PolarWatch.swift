@@ -87,6 +87,7 @@ final class PolarWatch: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     private var connectWaiter: CheckedContinuation<Void, Error>?
     private var notifyWaiter: CheckedContinuation<Void, Error>?
     private var writeReadyWaiter: CheckedContinuation<Void, Never>?
+    private var writeAckWaiter: CheckedContinuation<Void, Error>?
     private var nameFilter = "polar"
 
     var log: (String) -> Void = { _ in }
@@ -270,6 +271,10 @@ final class PolarWatch: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         }
     }
 
+    func peripheral(_ p: CBPeripheral, didWriteValueFor ch: CBCharacteristic, error: Error?) {
+        if let w = writeAckWaiter { writeAckWaiter = nil; error == nil ? w.resume() : w.resume(throwing: PolarError.disconnected) }
+    }
+
     func peripheralIsReady(toSendWriteWithoutResponse p: CBPeripheral) {
         if let w = writeReadyWaiter { writeReadyWaiter = nil; w.resume() }
     }
@@ -306,10 +311,24 @@ final class PolarWatch: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         p.writeValue(Data(frame), for: ch, type: .withoutResponse)
     }
 
-    private func requestRaw(_ stream: [UInt8], timeout: Double) async throws -> [UInt8] {
+    /// Write one frame and wait for the watch's acknowledgement (used for PUT, like the SDK's attribute-level responses).
+    private func writeAcked(_ frame: [UInt8], to ch: CBCharacteristic) async throws {
+        guard let p = peripheral, p.state == .connected else { throw PolarError.disconnected }
+        try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
+            queue.async {
+                self.writeAckWaiter = c
+                p.writeValue(Data(frame), for: ch, type: .withResponse)
+                self.queue.asyncAfter(deadline: .now() + 10) {
+                    if let w = self.writeAckWaiter { self.writeAckWaiter = nil; w.resume(throwing: PolarError.timeout) }
+                }
+            }
+        }
+    }
+
+    private func requestRaw(_ stream: [UInt8], timeout: Double, acked: Bool = false) async throws -> [UInt8] {
         guard let ch = mtu else { throw PolarError.noService }
         packets.clear()
-        for f in frames(stream) { try await write(f, to: ch) }
+        for f in frames(stream) { if acked { try await writeAcked(f, to: ch) } else { try await write(f, to: ch) } }
         var out: [UInt8] = [], expSeq: UInt8 = 0
         while true {
             let pkt = try await packets.next(timeout: min(timeout, Self.packetTimeout))   // per packet, not per file
@@ -353,6 +372,15 @@ final class PolarWatch: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
                 }
             }
         }
+    }
+
+    /// PUT (PbPFtpOperation{command=PUT, path} followed by the file data), as Polar BLE SDK's BlePsFtpClient.write.
+    /// WRITES TO THE WATCH: only called after the user confirmed, for the zone limits of the running profile.
+    func put(_ path: String, _ data: [UInt8], timeout: Double = 60) async throws {
+        let p = [UInt8](path.utf8)
+        let op: [UInt8] = [0x08] + PB.varint(1) + [0x12] + PB.varint(UInt64(p.count)) + p
+        let header: [UInt8] = [UInt8(op.count & 0xFF), UInt8((op.count >> 8) & 0x7F)]
+        _ = try await requestRaw(header + op + data, timeout: timeout, acked: true)
     }
 
     /// List a folder: [(name, size)], folder names end with "/".
