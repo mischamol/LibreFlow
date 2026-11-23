@@ -32,13 +32,20 @@ final class WatchSync: ObservableObject {
         running = true; lines = []; progress = 0; lastResult = nil
         log("— Sync started (app \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "?")) —")
         UIApplication.shared.isIdleTimerDisabled = true   // keep the screen on: iOS may pause the app when it locks
-        task = Task { await run(fromDate: fromDate); running = false; UIApplication.shared.isIdleTimerDisabled = false }
+        task = Task { [weak self] in
+            await self?.run(fromDate: fromDate)
+            guard let self, !Task.isCancelled else { return }   // after Cancel the state is already reset
+            running = false; UIApplication.shared.isIdleTimerDisabled = false
+        }
     }
 
     func cancel() {
         task?.cancel()
         watch?.disconnect()
         log("Cancelled.")
+        running = false                      // the button goes back to Sync right away
+        lastResult = "Sync cancelled."
+        UIApplication.shared.isIdleTimerDisabled = false
     }
 
     private func run(fromDate: String) async {
@@ -97,8 +104,10 @@ final class WatchSync: ObservableObject {
             if let t = store.decoded(id), store.writeSession(t) { decoded.append(id) }
             else if newIds.contains(id) { log("\(Self.pretty(id)): incomplete training on the watch, not added to the analysis.") }
         }
-        lastResult = newIds.isEmpty && decoded.isEmpty ? "No new trainings." : "\(newIds.count) new training(s), \(decoded.count) added to the analysis."
-        log(lastResult!)
+        if !Task.isCancelled || !decoded.isEmpty {   // after Cancel keep "Sync cancelled." unless something was still added
+            lastResult = newIds.isEmpty && decoded.isEmpty ? "No new trainings." : "\(newIds.count) new training(s), \(decoded.count) added to the analysis."
+        }
+        log(lastResult ?? "Sync cancelled.")
         if !decoded.isEmpty { onNewTrainings?(decoded) }
         watch = nil
     }

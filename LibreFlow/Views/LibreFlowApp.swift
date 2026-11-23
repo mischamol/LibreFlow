@@ -31,6 +31,7 @@ struct LibreFlowApp: App {
                 StravaExportView(trainingId: t.id, toStrava: t.toStrava).environmentObject(model).environmentObject(StravaClient.shared)
             }
             .sheet(item: $model.shareURL) { s in ShareSheet(items: [s.url]) }
+            .sheet(isPresented: $model.planToWatch) { PlanToWatchView().environmentObject(model).environmentObject(model.sync) }
         }
     }
 }

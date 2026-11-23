@@ -187,6 +187,11 @@ final class PolarWatch: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         queue.async {
             self.central.stopScan()
             if let p = self.peripheral { self.central.cancelPeripheralConnection(p) }
+            // end anything still waiting (e.g. Cancel while looking for the watch), instead of running into a time-out
+            if let w = self.connectWaiter { self.connectWaiter = nil; w.resume(throwing: CancellationError()) }
+            if let w = self.notifyWaiter { self.notifyWaiter = nil; w.resume(throwing: CancellationError()) }
+            if let w = self.writeAckWaiter { self.writeAckWaiter = nil; w.resume(throwing: CancellationError()) }
+            self.packets.fail(PolarError.disconnected)
         }
     }
 
@@ -381,6 +386,15 @@ final class PolarWatch: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         let op: [UInt8] = [0x08] + PB.varint(1) + [0x12] + PB.varint(UInt64(p.count)) + p
         let header: [UInt8] = [UInt8(op.count & 0xFF), UInt8((op.count >> 8) & 0x7F)]
         _ = try await requestRaw(header + op + data, timeout: timeout, acked: true)
+    }
+
+    /// REMOVE (PbPFtpOperation{command=REMOVE, path}), as Polar BLE SDK's removeFileOrDirectory.
+    /// WRITES TO THE WATCH: only for favorites LibreFlow wrote itself, after the user confirmed.
+    func remove(_ path: String, timeout: Double = 30) async throws {
+        let p = [UInt8](path.utf8)
+        let op: [UInt8] = [0x08] + PB.varint(3) + [0x12] + PB.varint(UInt64(p.count)) + p
+        let header: [UInt8] = [UInt8(op.count & 0xFF), UInt8((op.count >> 8) & 0x7F)]
+        _ = try await requestRaw(header + op, timeout: timeout)
     }
 
     /// List a folder: [(name, size)], folder names end with "/".

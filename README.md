@@ -59,6 +59,9 @@ That is why LibreFlow keeps **all data local**:
   current fitness) or set by hand; the running plan shows which zone each session falls in. *Send zones to watch…*
   reads the running profile from the watch, shows the zones now and after the change, and only after you confirm
   writes nothing but the zone limits (with a backup and *Restore original zones…*).
+- **Running Plan › Send to watch…**: the next 7 days of the plan as favorites on the watch, with distance goals,
+  heart-rate zones for easy running and your pace zones for the fast parts. Earlier LibreFlow favorites are replaced;
+  favorites from Polar Flow are never changed.
 - **Settings › Privacy**: include heart rate (**off** by default) and the GPS route (on) in exports and uploads;
   *Show map* (on): routes on OpenStreetMap – the only internet access the analysis has; off = route drawn without
   a map.

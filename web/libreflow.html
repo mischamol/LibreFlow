@@ -321,6 +321,9 @@ ol{padding-left:20px}
     <div id="planStatus"></div>
     <div class="kpis" id="planKpis"></div>
     <p class="hint" id="planHistory" style="margin:10px 2px 0"></p>
+    <section class="card hidden" id="planWatchCard"><div class="row" style="justify-content:space-between">
+      <div><h2>On your watch</h2><p class="hint" style="margin:0">Send the next 7 days as favorites to the watch. You see everything first; nothing is written until you confirm.</p></div>
+      <button id="planToWatch" class="primary">Send to watch…</button></div></section>
     <section class="card"><h2>Updates</h2><p class="hint">After every new activity the plan is checked against what you did.</p><div id="planLog"></div></section>
     <section class="card"><h2>Weeks</h2><p class="hint" id="planWeeksHint"></p><div id="planWeeks"></div></section>
     <section class="card"><h2>Training paces</h2><p class="hint" id="planPaceHint"></p><div id="planPaces"></div></section>
@@ -1991,6 +1994,64 @@ $('#zSave').onclick = () => {
 };
 window.appZones = () => zones();
 window.appSetZones = o => { const error = setZones(o); return {...zones(), error}; };
+
+/* ---------- running plan → watch favorites ----------
+   The next 7 days of the plan as Polar "phased" favorites (format verified on a Grit X): each phase has a distance
+   (metres) or time goal and a heart-rate or pace zone (zone numbers 1–5, i.e. Settings › Training zones, which the
+   app can send to the watch). The app's native side encodes and writes them, after showing what it will do. */
+function planFavorites(){
+  if (!PLAN?.goal) return {error: 'No running plan yet.'};
+  const o = PLAN_OUT || buildPlan(new Date()), today = dayStart(new Date()), end = addDays(today, 7);
+  const pc = o.pc, easyHr = [1, Math.max(1, hrZoneOf(P.aet - 1))];
+  const pz = sec => { const z = paceZoneOf(sec); return [z, z]; };
+  const km = x => Math.round(x * 1000);
+  const d = (name, metres, zone, kind) => ({name, goal: 'distance', metres: Math.max(100, Math.round(metres)), intensity: kind, lo: zone[0], hi: zone[1]});
+  const t = (name, seconds, zone, kind) => ({name, goal: 'time', seconds: Math.round(seconds), intensity: kind, lo: zone[0], hi: zone[1]});
+  const reps = (list, work, rec, n) => { if (n > 1){ rec.repeat = n - 1; rec.jump = list.length + 1; } list.push(work, rec); };   // jump: 1-based index of the work phase
+  const out = [];
+  for (const w of o.weeks) for (const x of w.sessions){
+    if (x.date < today || x.date >= end || x.done != null || x.missed || x.rest) continue;
+    const ph = [];
+    const wu = (x.wu || 4) / 2 * 1000;
+    switch (x.type){
+      case 'easy': case 'medium': case 'long': ph.push(d(`Easy ${fmtNum(x.km, 1)} km`, km(x.km), easyHr, 'hr')); break;
+      case 'strides':
+        ph.push(d(`Easy ${fmtNum(x.km, 1)} km`, km(x.km), easyHr, 'hr'));
+        reps(ph, t('Stride 20 s', 20, [1, 5], 'hr'), t('Walk back', 60, [1, 5], 'hr'), 6); break;
+      case 'threshold':
+        ph.push(d('Warm-up', wu, easyHr, 'hr'));
+        reps(ph, d(`T ${pc ? fmtPace(pc.T) : ''}`.trim(), 1600, pc ? pz(pc.T) : [4, 4], 'pace'), t('Jog 1 min', 60, easyHr, 'hr'), x.reps);
+        ph.push(d('Cool-down', wu, easyHr, 'hr')); break;
+      case 'intervals':
+        ph.push(d('Warm-up', wu, easyHr, 'hr'));
+        reps(ph, d(`I ${pc ? fmtPace(pc.I) : ''}`.trim(), 1000, pc ? pz(pc.I) : [5, 5], 'pace'), t('Jog 2:30', 150, easyHr, 'hr'), x.reps);
+        ph.push(d('Cool-down', wu, easyHr, 'hr')); break;
+      case 'racepace':
+        ph.push(d('Warm-up', wu, easyHr, 'hr'));
+        reps(ph, d(`Race ${o.goalPace ? fmtPace(o.goalPace) : ''}`.trim(), x.rep * 1000, o.goalPace ? pz(o.goalPace) : [4, 4], 'pace'), t(x.rep >= 3 ? 'Jog 2 min' : 'Jog 1 min', x.rep >= 3 ? 120 : 60, easyHr, 'hr'), x.reps);
+        ph.push(d('Cool-down', wu, easyHr, 'hr')); break;
+      case 'longM':
+        ph.push(d('Easy', km(x.km - x.mkm), easyHr, 'hr'));
+        ph.push(d(`M ${pc ? fmtPace(pc.M) : ''}`.trim(), km(x.mkm), pc ? pz(pc.M) : [3, 3], 'pace')); break;
+      case 'longFast':
+        ph.push(d('Easy', km(x.km - x.fkm), easyHr, 'hr'));
+        ph.push(d(`T ${pc ? fmtPace(pc.T) : ''}`.trim(), km(x.fkm), pc ? pz(pc.T) : [4, 4], 'pace')); break;
+      case 'race':
+        ph.push(d(o.G.name, o.G.m, o.goalPace ? pz(o.goalPace) : [1, 5], o.goalPace ? 'pace' : 'hr')); break;
+      default: continue;
+    }
+    const day = x.date.toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric'});
+    const short = {easy: 'Easy', medium: 'Medium-long', long: 'Long', strides: 'Easy+strides', threshold: `Threshold ${x.reps}x1.6`,
+      intervals: `Intervals ${x.reps}x1`, racepace: `Race pace ${x.reps}x${x.rep >= 1 ? x.rep : x.rep * 1000 + 'm'}`, longM: 'Long+M', longFast: 'Long+fast', race: 'Race'}[x.type];
+    const name = `${day} ${short}${x.km ? ` ${fmtNum(x.km, 1)}k` : ''}`.slice(0, 40);
+    out.push({date: ymdStr(x.date), name, description: `${x.title}: ${x.detail}`.replace(/<[^>]+>/g, '').slice(0, 240), phases: ph.map(p => ({...p, name: p.name.slice(0, 20)}))});
+  }
+  return {sessions: out, zonesAuto: zones().paceAuto};
+}
+window.appPlanFavorites = () => planFavorites();
+
+$('#planToWatch').onclick = () => APP?.postMessage({cmd: 'planToWatch'});
+if (APP) $('#planWatchCard').classList.remove('hidden');
 let PLAN_EDIT = false;
 // time as three number fields (an iPhone number keyboard has no ':'); null = empty, false = invalid
 function getHms(id){

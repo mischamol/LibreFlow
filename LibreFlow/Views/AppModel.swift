@@ -6,6 +6,7 @@ import SwiftUI
 @MainActor
 final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     @Published var stravaTarget: StravaTarget?
+    @Published var planToWatch = false
     @Published var shareURL: ShareItem?
     @Published var tab = 0
     /// Settings › Strava: show the To Strava button on runs (off by default)
@@ -151,6 +152,8 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
             if let t = ["run": 0, "trends": 1, "runs": 2, "plan": 4][m["view"] as? String ?? ""], t != tab { tab = t }
         case "status":
             pageStatus = m["text"] as? String ?? ""
+        case "planToWatch":
+            planToWatch = true
         case "strava":
             if let id = m["id"] as? String { stravaTarget = StravaTarget(id: id, toStrava: m["toStrava"] as? Bool ?? false) }
         default: break
@@ -204,6 +207,13 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
     func refreshSettings() async {
         if let d = await call("return window.appSettings ? appSettings() : null") as? [String: Any] { settings = PageSettings(d) }
     }
+    /// The next 7 days of the running plan as watch favorites (built by the analysis page).
+    func planFavorites() async -> (sessions: [PlanFavorite], error: String?) {
+        guard let d = await call("return window.appPlanFavorites ? appPlanFavorites() : null") as? [String: Any] else { return ([], "The running plan is not available.") }
+        if let e = d["error"] as? String { return ([], e) }
+        return ((d["sessions"] as? [[String: Any]] ?? []).compactMap(PlanFavorite.init), nil)
+    }
+
     // MARK: training zones (kept in the analysis page; see Settings › Training zones)
     struct Zones {
         var hr: [Int] = []          // 6 limits in bpm, ascending (zone n = hr[n-1] ... hr[n])

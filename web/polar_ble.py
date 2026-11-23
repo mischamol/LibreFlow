@@ -3,10 +3,10 @@
 Speaks Polar's PSFTP file protocol over BLE, as implemented in the open-source
 Polar BLE SDK (service 0xFEEE, RFC76 framing, PbPFtpOperation requests).
 
-Only GET operations are sent, with two explicit exceptions that each ask you to type WRITE first:
-`fav-put` writes one training favorite to a new folder /U/0/FAV/<nn>/, and `zones-put` replaces only the heart-rate
-and speed zone limits in the running sport profile (everything else in that file stays byte for byte the same).
-Nothing is ever deleted from the watch.
+Only GET operations are sent, with three explicit exceptions that each ask you to confirm by typing first:
+`fav-put` writes one training favorite to a new folder /U/0/FAV/<nn>/, `zones-put` replaces only the heart-rate
+and speed zone limits in the running sport profile (everything else in that file stays byte for byte the same), and
+`fav-rm` removes one favorite that LibreFlow wrote itself (ID 900000000 or higher; Polar Flow favorites are refused).
 
 Usage:
   python polar_ble.py scan
@@ -18,6 +18,7 @@ Usage:
   python polar_ble.py --sync all <address> [outdir] [--since YYYYMMDD] [--max N]   (download every training, resumable)
   python polar_ble.py export [indir] [outdir] [--full]   (downloaded trainings -> training-session-*.json)
   python polar_ble.py --sync fav-put <address> <dir with TST.BPB + ID.BPB> <nn>   (WRITES one favorite; asks first)
+  python polar_ble.py --sync fav-rm <address> <nn>   (REMOVES one favorite written by LibreFlow; asks first)
   python polar_ble.py --sync zones-put <address> <backup PROFILE.BPB> --hr 50,136,146,156,167,181 --pace 6:03,5:04,4:37,4:16
                        (WRITES the zones of /U/0/SPROF/0/PROFILE.BPB; asks first)   … --restore writes the backup back
 (The old Dutch names alles/exporteer/--vanaf/--volledig still work.)
@@ -93,6 +94,11 @@ def pb_fields(buf):
 def pb_op_put(path):
     p = path.encode()
     return b"\x08" + varint(1) + b"\x12" + varint(len(p)) + p   # PbPFtpOperation{command=PUT, path}
+
+
+def pb_op_remove(path):
+    p = path.encode()
+    return b"\x08" + varint(3) + b"\x12" + varint(len(p)) + p   # PbPFtpOperation{command=REMOVE, path}
 
 
 def pb_op_get(path):
@@ -272,6 +278,10 @@ class Pftp:
         BlePsFtpClient.write: RFC60 header length + PbPFtpOperation + file data in one RFC76 stream."""
         header = pb_op_put(path)
         return await self.request_raw(struct.pack("<H", len(header) & 0x7FFF) + header + data, timeout, acked=True)
+
+    async def remove(self, path, timeout=30):
+        """REMOVE a file or folder, as Polar BLE SDK's PolarFileUtils.removeFileOrDirectory."""
+        return await self.request(pb_op_remove(path), timeout)
 
     async def get(self, path, timeout=60):
         return await self.request(pb_op_get(path), timeout)
@@ -567,6 +577,44 @@ async def cmd_zones_put(args):
         await p.put(path, new)
         back = await p.get(path, timeout=60)
         print("written and read back:", "identical, OK" if back == new else f"DIFFERENT ({len(back)} bytes) – keep the backup at hand")
+    await with_pftp(args, run)
+
+
+LIBREFLOW_FAV_ID = 900000000   # favorites written by LibreFlow use IDs from here up (Polar Flow's are far lower)
+
+
+async def cmd_fav_rm(args):
+    """Remove ONE favorite folder /U/0/FAV/<nn>/ - only when its ID.BPB says LibreFlow wrote it."""
+    slot = args.slot
+    if not (len(slot) == 2 and slot.isdigit()):
+        sys.exit("slot must be two digits, e.g. 02")
+    folder = f"/U/0/FAV/{slot}/"
+
+    async def run(p):
+        existing = [n for n, _ in await p.ls("/U/0/FAV/")]
+        print("/U/0/FAV/ now:", " ".join(sorted(existing)) or "(empty)")
+        if f"{slot}/" not in existing:
+            print(f"{folder} does not exist: nothing removed."); return
+        files = [n for n, _ in await p.ls(folder)]
+        fid = next((v for f, _, v in pb_fields(await p.get(folder + "ID.BPB")) if f == 1), 0) if "ID.BPB" in files else 0
+        if not isinstance(fid, int) or fid < LIBREFLOW_FAV_ID:
+            print(f"{folder} was not written by LibreFlow (ID {fid}): nothing removed."); return
+        name = "?"
+        if "TST.BPB" in files:
+            n = next((v for f, _, v in pb_fields(await p.get(folder + "TST.BPB")) if f == 2), b"")
+            name = next((v for f, _, v in pb_fields(n) if f == 1), b"?").decode(errors="replace") if isinstance(n, (bytes, bytearray)) else "?"
+        print(f"About to REMOVE from the watch: {folder}  \"{name}\"  (ID {fid}; files: {' '.join(files)})")
+        if input("Type REMOVE to continue: ").strip() != "REMOVE":
+            print("Cancelled: nothing removed."); return
+        for n in files:
+            await p.remove(folder + n)
+            print(f"  removed {folder}{n}")
+        try:
+            await p.remove(folder)
+            print(f"  removed {folder}")
+        except PftpError as e:
+            print(f"  folder itself not removed ({e})")
+        print("/U/0/FAV/ now:", " ".join(sorted(n for n, _ in await p.ls("/U/0/FAV/"))))
     await with_pftp(args, run)
 
 
@@ -904,6 +952,8 @@ def main():
     s = sub.add_parser("get"); s.add_argument("address"); s.add_argument("path"); s.add_argument("outfile", nargs="?")
     s = sub.add_parser("pull"); s.add_argument("address"); s.add_argument("path"); s.add_argument("outdir"); s.add_argument("--depth", type=int, default=6)
     s = sub.add_parser("decode"); s.add_argument("file")
+    s = sub.add_parser("fav-rm", help="REMOVE one favorite that LibreFlow wrote (asks first)")
+    s.add_argument("address"); s.add_argument("slot")
     s = sub.add_parser("zones-put", help="WRITE the heart-rate / pace zones of the running profile (asks first)")
     s.add_argument("address"); s.add_argument("backup", help="PROFILE.BPB downloaded earlier (must match the watch)")
     s.add_argument("--hr", help="6 heart-rate limits, e.g. 50,136,146,156,167,181")

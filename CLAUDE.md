@@ -47,6 +47,15 @@ are in `CLAUDE.local.md`, which is not in git.
   showed up on the watch, and the watch rebuilt FAVCACHE.DAT itself (3rd record: index 2, name, name length, the rest
   identical; [0x31] = 1 for phased). So only TST.BPB + ID.BPB need writing. Still unknown: distance-goal and
   speed-zone units, whether PUT overwrites an existing file, and whether a Polar Flow sync removes such favorites.
+  Distance/pace test OK (23 Nov 2026, FAV/03 "LibreFlow dist test", built by hand, shown correctly on the watch):
+  phase goal {1: 2 DISTANCE, 3: float metres}, intensity {1: 2 SPEED_ZONE, 3: speed_zone {1 lower, 2 upper} = zone
+  numbers 1–5}, description field 5 {1 text}; recovery phase with repeat_count 2 / jump_index 2 loops back to the
+  2nd phase (1-based) for 3 reps. Our favorites use ID values from 900000001 up (Flow's are ~84 million).
+  Remove test (23 Nov 2026, `fav-rm 02`): files + folder removed fine (watch then sent D2H notification 0202), but the
+  rebuilt FAVCACHE.DAT listed only FAV/00 and 01: FAV/03 after the gap was left out. Favorite folders must stay
+  contiguous from 00 (as Polar Flow keeps them), so LibreFlow has to renumber its own folders when it removes some.
+  Renumber test OK: fav-put of the same favorite to 02 + fav-rm 03 → cache 00/01/02 and the favorite visible again.
+  Route favorites (type 3) do not appear in the watch's favorites list of trainings.
   Pace zones: Polar Flow only offers pace zone 1–5 in a favorite; the limits live in the sport profile
   /U/0/SPROF/<n>/PROFILE.BPB › 3 settings › 6 zone_limits › 2 speed_zone {1 lower, 2 upper} as float km/h (running =
   profile 0). Plan paces usually fall outside the user's narrow zones, so the idea is phase names with the target pace
@@ -77,7 +86,13 @@ are in `CLAUDE.local.md`, which is not in git.
   Send zones to watch (`BLE/WatchZones.swift`, `ProfileZones.swift`, `PolarWatch.put` with acknowledged frames): read
   /U/0/SPROF/0/PROFILE.BPB, preview old/new, write only after the user confirms (re-reads first, stops if changed),
   read back; zone 1 lower / zone 5 upper kept from the watch; first profile read saved as Documents/zones-backup/
-  PROFILE-original.BPB (Restore). Byte-identical to `zones-put`, which was verified on the watch.
+  PROFILE-original.BPB (Restore). Byte-identical to `zones-put`, which was verified on the watch. One confirmation
+  first (showing the zones), then one watch session reads, writes and verifies (no second confirm / second sync).
+  Running Plan › Send to watch (`PlanToWatchView`, `WatchFavorites`, page `appPlanFavorites()`): next 7 days as
+  phased favorites (distance goals, HR zones for easy parts, pace zones for fast parts; encoder byte-identical to the
+  favorite verified on the watch); one confirmation, one session; LibreFlow favorites (id ≥ 900000000) are replaced
+  or removed and renumbered so FAV stays gapless; Flow favorites are never touched.
+  Sync Cancel: `PolarWatch.disconnect()` ends pending waits; the button resets at once.
   Plan: goal {dist 5k/10k/10mi/half/marathon/custom (+km), date, optional time, days/week, long-run day} in `PLAN` (store + backups).
   `buildPlan()` recomputes everything from the actual running on every refresh (volume from the 4-week average,
   +≤10%/week, lighter week every 4th week anchored to `PLAN.created`, long run ≤ +10% of the longest in 30 days,
@@ -133,7 +148,8 @@ are in `CLAUDE.local.md`, which is not in git.
   test on 23 Nov 2026; any further write use needs a new OK). `zones-put <addr> <backup> --hr 6 bpm --pace 4 min:sec`
   replaces only settings›zone_limits HR/speed zones of /U/0/SPROF/0/PROFILE.BPB (refuses if the watch file differs from
   the backup; zone 1 lower and zone 5 upper kept; reads back to verify; `--restore` writes the backup). Also needs
-  the user's explicit OK per use. Old Dutch names (`alles`, `exporteer`, `--vanaf`, `--volledig`) are aliases.
+  the user's explicit OK per use. `fav-rm <addr> <nn>` REMOVEs (PbPFtpOperation command 3) the files and folder
+  of one favorite, only when its ID.BPB id ≥ 900000000 (written by LibreFlow); asks to type REMOVE. Old Dutch names (`alles`, `exporteer`, `--vanaf`, `--volledig`) are aliases.
   Internal names in `horloge_data/` (`.compleet`, `gecontroleerde_dagen`) are kept for compatibility.
 
 ## Sources

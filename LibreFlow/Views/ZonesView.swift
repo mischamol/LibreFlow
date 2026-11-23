@@ -6,6 +6,8 @@ struct ZonesView: View {
     @EnvironmentObject var model: AppModel
     @EnvironmentObject var sync: WatchSync
     @StateObject private var watch = WatchZones()
+    @State private var confirmSend = false
+    @State private var confirmRestore = false
     @State private var z = AppModel.Zones()
     @State private var hr: [String] = Array(repeating: "", count: 6)
     @State private var pace: [String] = Array(repeating: "", count: 5)
@@ -66,31 +68,39 @@ struct ZonesView: View {
 
     @ViewBuilder private var watchSection: some View {
         Section {
-            switch watch.phase {
-            case .reading: HStack { ProgressView(); Text("Reading the running profile from the watch…") }
-            case .writing: HStack { ProgressView(); Text("Writing the zones to the watch…") }
-            case .preview(let cur, let new, let restore):
-                compare("Heart rate", cur.hr.map { "\($0.lowerBound)–\($0.upperBound)" }, new.hr.map { "\($0.lowerBound)–\($0.upperBound)" })
-                compare("Pace /km", cur.speed.map(Self.paceRange), new.speed.map(Self.paceRange))
-                Button(restore ? "Restore these zones on the watch" : "Write these zones to the watch", role: .destructive) { Task { await watch.confirm() } }
-                Button("Cancel") { watch.cancel() }
-            default:
-                Button { Task { await watch.prepare(hr: z.hr, pace: z.pace) } } label: { Label("Send zones to watch…", systemImage: "applewatch.radiowaves.left.and.right") }
+            if watch.phase == .writing {
+                HStack { ProgressView(); Text("Connecting to the watch and writing the zones…") }
+            } else {
+                Button { confirmSend = true } label: { Label("Send zones to watch…", systemImage: "applewatch.radiowaves.left.and.right") }
                     .disabled(sync.running || z.hr.count != 6 || z.pace.count != 5 || (z.paceAuto && z.vdot == nil))
                 if z.paceAuto && z.vdot == nil {
                     Text("Automatic pace zones need a run of 3 km or more in the last 120 days; until then set them yourself above.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 if watch.hasBackup {
-                    Button { Task { await watch.prepareRestore() } } label: { Label("Restore original zones…", systemImage: "arrow.uturn.backward") }
+                    Button { confirmRestore = true } label: { Label("Restore original zones…", systemImage: "arrow.uturn.backward") }
                         .disabled(sync.running)
                 }
                 if case .done(let m) = watch.phase { Text(m).foregroundStyle(.secondary) }
                 if case .failed(let m) = watch.phase { Text(m).foregroundStyle(.red) }
             }
         } header: { Text("Watch") } footer: {
-            Text("Reads the running sport profile from the watch and shows the zones now and after the change. Only after you confirm, the app writes the profile back with nothing but the zone limits changed, and reads it back to check. Zone 1 keeps its lower limit and zone 5 its upper limit from the watch. The first profile read is kept as a backup. A Polar Flow sync may set the zones from Flow again.")
+            Text("After you confirm, the app connects once: it reads the running sport profile, changes nothing but the zone limits, and reads it back to check. Zone 1 keeps its lower limit and zone 5 its upper limit from the watch. The profile as it was before the first change is kept as a backup. A Polar Flow sync may set the zones from Flow again.")
         }
+        .confirmationDialog("Send these zones to the watch?", isPresented: $confirmSend, titleVisibility: .visible) {
+            Button("Send to watch") { Task { await watch.send(hr: z.hr, pace: z.pace) } }
+        } message: { Text(sendSummary) }
+        .confirmationDialog("Put the original zones back on the watch?", isPresented: $confirmRestore, titleVisibility: .visible) {
+            Button("Restore", role: .destructive) { Task { await watch.restore() } }
+        } message: { Text("The running profile as it was before LibreFlow first changed its zones.") }
+    }
+
+    private var sendSummary: String {
+        guard z.hr.count == 6, z.pace.count == 5 else { return "" }   // zones not loaded yet
+        let hrText = (1...5).map { $0 == 1 ? "1: below \(z.hr[1])" : "\($0): \(z.hr[$0 - 1])–\(z.hr[$0])" }.joined(separator: "  ")
+        let p = { (s: Int) in String(format: "%d:%02d", s / 60, s % 60) }
+        let paceText = (1...5).map { i in i == 1 ? "1: slower than \(p(z.pace[1]))" : i == 5 ? "5: faster than \(p(z.pace[4]))" : "\(i): \(p(z.pace[i - 1]))–\(p(z.pace[i]))" }.joined(separator: "  ")
+        return "Heart rate (bpm) \(hrText)\n\nPace (/km) \(paceText)\n\nKeep the watch nearby; the app connects once and writes only these limits."
     }
 
     private func compare(_ title: String, _ old: [String], _ new: [String]) -> some View {

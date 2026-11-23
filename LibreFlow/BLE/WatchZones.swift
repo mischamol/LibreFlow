@@ -20,72 +20,55 @@ final class WatchZones: ObservableObject {
     private var previousURL: URL { dir.appendingPathComponent("PROFILE-previous.BPB") }
     var hasBackup: Bool { FileManager.default.fileExists(atPath: originalURL.path) }
 
-    /// Read the profile and prepare the app's zones (zone 1 keeps its lower and zone 5 its upper limit from the watch).
-    func prepare(hr: [Int], pace: [Int]) async {
+    /// The zones the app would put on the watch (zone 1 lower and zone 5 upper limits are kept from the watch).
+    static func wanted(hr: [Int], pace: [Int], keeping cur: ProfileZones) -> ProfileZones {
+        let speed: [Float] = [cur.speed[0].lowerBound] + pace[1...4].map { 3600 / Float($0) } + [cur.speed[4].upperBound]
+        let lows = [cur.hr[0].lowerBound] + Array(hr[1...4]), highs = Array(hr[1...5])
+        return ProfileZones(hr: zip(lows, highs).map { $0...$1 }, speed: zip(speed, speed.dropFirst()).map { $0...$1 })
+    }
+
+    /// The user already confirmed (before connecting): one watch session reads the running profile, writes only the
+    /// zone limits, reads it back and closes. No second confirmation, no second sync on the watch.
+    func send(hr: [Int], pace: [Int]) async {
         guard hr.count == 6, pace.count == 5 else { phase = .failed("No zones to send."); return }
-        await read { cur in
-            let speed: [Float] = [cur.speed[0].lowerBound] + pace[1...4].map { 3600 / Float($0) } + [cur.speed[4].upperBound]
-            let lows = [cur.hr[0].lowerBound] + Array(hr[1...4]), highs = Array(hr[1...5])
-            return ProfileZones(hr: zip(lows, highs).map { $0...$1 }, speed: zip(speed, speed.dropFirst()).map { $0...$1 })
-        }
+        await run({ cur, _ in Self.wanted(hr: hr, pace: pace, keeping: cur) })
     }
 
-    /// Read the profile and prepare the zones of the backup made before the first change.
-    func prepareRestore() async {
-        guard let b = try? Data(contentsOf: originalURL), let z = ProfileZones.read([UInt8](b)) else { phase = .failed("No backup found."); return }
-        await read(restore: true) { _ in z }
+    /// Same, putting back the profile saved before LibreFlow first changed the zones.
+    func restore() async {
+        guard let b = try? Data(contentsOf: originalURL) else { phase = .failed("No backup found."); return }
+        await run({ _, _ in nil }, restoreFile: [UInt8](b))
     }
 
-    private func read(restore: Bool = false, make: (ProfileZones) -> ProfileZones) async {
-        phase = .reading
-        let w = PolarWatch()
-        do {
-            try await w.connect()
-            try await w.startSync()
-            let b = try await w.get(Self.path)
-            try? await w.stopSync()
-            w.disconnect()
-            guard ProfileZones.sport(b) == 1, let cur = ProfileZones.read(b) else { phase = .failed("The running profile on the watch looks different than expected; nothing was changed."); return }
-            let wanted = make(cur)
-            let out = restore ? (try? Data(contentsOf: originalURL)).map { [UInt8]($0) } : try? wanted.replacing(in: b)
-            guard let out, let check = ProfileZones.read(out) else { phase = .failed("Could not build the new profile; nothing was changed."); return }
-            if out == b { phase = .done("The watch already has these zones."); return }
-            file = b; pendingNew = out
-            phase = .preview(current: cur, new: check, restore: restore)
-        } catch {
-            w.disconnect()
-            phase = .failed("Could not read the watch: \(error.localizedDescription)")
-        }
-    }
-
-    func cancel() { file = nil; pendingNew = nil; phase = .idle }
-
-    /// Write after the user confirmed. Re-reads first and stops if the profile changed in between.
-    func confirm() async {
-        guard let file, let out = pendingNew else { return }
+    private func run(_ make: (ProfileZones, [UInt8]) throws -> ProfileZones?, restoreFile: [UInt8]? = nil) async {
         phase = .writing
         let w = PolarWatch()
         do {
             try await w.connect()
             try await w.startSync()
-            let now = try await w.get(Self.path)
-            guard now == file else {
-                try? await w.stopSync(); w.disconnect()
-                phase = .failed("The profile on the watch changed in the meantime; nothing was written. Try again."); return
+            let b = try await w.get(Self.path)
+            guard ProfileZones.sport(b) == 1, let cur = ProfileZones.read(b) else {
+                await close(w); phase = .failed("The running profile on the watch looks different than expected; nothing was changed."); return
             }
+            let out: [UInt8]
+            if let restoreFile { out = restoreFile }
+            else if let z = try make(cur, b) { out = try z.replacing(in: b) }
+            else { await close(w); return }
+            guard ProfileZones.read(out) != nil else { await close(w); phase = .failed("Could not build the new profile; nothing was changed."); return }
+            if out == b { await close(w); phase = .done("The watch already had these zones."); return }
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            if !hasBackup { try Data(file).write(to: originalURL) }      // the zones as they were before LibreFlow changed them
-            try Data(file).write(to: previousURL)
+            if !hasBackup { try Data(b).write(to: originalURL) }      // the zones as they were before LibreFlow changed them
+            try Data(b).write(to: previousURL)
             try await w.put(Self.path, out)
             let back = try await w.get(Self.path)
-            try? await w.stopSync()
-            w.disconnect()
-            self.file = nil; pendingNew = nil
-            phase = back == out ? .done("Zones written to the watch and checked. New trainings use them from now on.")
+            await close(w)
+            phase = back == out ? .done(restoreFile == nil ? "Zones written to the watch and checked. New trainings use them from now on." : "Original zones put back on the watch and checked.")
                                 : .failed("Written, but reading back gave a different file. Use Restore original zones to be safe.")
         } catch {
             w.disconnect()
-            phase = .failed("Writing failed: \(error.localizedDescription) Restore original zones puts the backup back.")
+            phase = .failed("Stopped: \(error.localizedDescription) Nothing else was changed; try again.")
         }
     }
+
+    private func close(_ w: PolarWatch) async { try? await w.stopSync(); w.disconnect() }
 }
