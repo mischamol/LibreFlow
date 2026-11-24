@@ -117,6 +117,11 @@ are in `CLAUDE.local.md`, which is not in git.
   (fatigue), ≥ 14 days off. Feasibility (time, volume, long run, target VDOT) → status, Analysis advice and an
   alert() once when it turns infeasible after a new activity; `PLAN.log` keeps the last 20 updates. Every session
   has a "Why" with numbered sources (`PLAN_SRC`). App tab 4 = page view `plan`.
+  Analysis advice uses the same history baseline (`analyse()` → `block` = best 8-week avg of 2 years, `experienced` =
+  ≥ 12 of 24 months with ≥ 4 activities): load ratio and weekly jump compare with max(4-week avg, block) for
+  experienced runners ("Back to your usual volume" when the plain ratio > 1.3 but vs. block ≤ 1.3), and the long-run
+  share uses max(4-week avg, min(block, 2× 4-week avg)). Checked on the user's data: 47.3 km vs block 42.1 → 1.12. `analyse()` builds weeks
+  with calendar days keyed by `ymdStr` (the old ms stepping lost weeks around DST: ~95 km/year in a test).
   Latest Activity / All Activities show every sport (speed km/h and no shoes for non-shoe sports; sport filter);
   Analysis has its own selector at the top (All activities, default, or one sport; `ANA_SPORT`, localStorage);
   pace-based parts (pace, efficiency, VDOT, predictions, best efforts, cadence) only use running sports. No sport
