@@ -38,7 +38,8 @@ That is why LibreFlow keeps **all data local**:
 - **Latest Activity**: your newest activity (older/newer), with pace or speed, heart rate, running index, a chart,
   the route on a map, kilometre splits and time per zone. **Edit…** changes the sport or shoes, or deletes it.
 - **Analysis**: advice at the top, key figures, charts, deep analysis, predictions and records. Choose *All
-  activities* or one sport at the top; the app remembers your choice.
+  activities* or one sport at the top; the app remembers your choice. Distance-based load advice counts running only, like the
+  running plan; other sports count in fitness and fatigue (from heart rate).
 - **Running Plan**: an adaptive training plan for a goal race (5 km, 10 km, 10 miles, half, marathon or any distance you
   enter, on a date, optionally with a target time). It is rebuilt from what you actually ran after every activity: weekly distance grows from your real
   volume (experienced runners may rebuild faster towards the volume they sustained in the last 2 years), paces follow your current fitness, missed sessions are not made up, load spikes and fatigue signals turn

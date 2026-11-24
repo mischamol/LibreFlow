@@ -120,7 +120,9 @@ are in `CLAUDE.local.md`, which is not in git.
   **Plan and Analysis must always use the same rules**: both take their signals from `trainingSignals(list, asOf)`
   (acute/chronic, block, experienced, load ratio vs max(4-week avg, block), gap49, effDrop, Banister form via
   `formSeries`) at the same moment (end of today; Analysis falls back to its last activity day when the data is > 28
-  days old). The plan's flags: spike = ratio > 1.3, fatigue = effDrop or form < −40% (break-nuanced text). Change a
+  days old). Distance-based load advice (ratio, weekly jump, long-run share) counts running only, also under
+  "All activities" (`analyse()` → `lr`; another sport only when no running is selected); other sports count via the
+  heart-rate based form (all sports). The plan's flags: spike = ratio > 1.3, fatigue = effDrop or form < −40% (break-nuanced text). Change a
   rule there, never in one view only.
   Analysis advice uses the same history baseline (`analyse()` → `block` = best 8-week avg of 2 years, `experienced` =
   ≥ 12 of 24 months with ≥ 4 activities): load ratio and weekly jump compare with max(4-week avg, block) for

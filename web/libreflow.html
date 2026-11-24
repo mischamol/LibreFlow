@@ -911,20 +911,26 @@ function analyse(runs){
   let maxGap = 0; for (let i = 1; i < last12.length; i++) maxGap = Math.max(maxGap, (last12[i].date - last12[i-1].date)/DAY);
   let streak = 0; { const days = new Set(runs.map(r => +dayStart(r.date))); for (let x = new Date(ref); days.has(+x); x = new Date(x.getFullYear(), x.getMonth(), x.getDate()-1)) streak++; }
 
-  const full = weeks.slice(0, -1); // leave out the last (possibly incomplete) week as 'last week'
+  // distance-based load advice counts running only (as the running plan does), also under "All activities": a km on
+  // the bike is not a km of running. Other sports still count in fitness/fatigue (heart-rate based, all sports).
+  // Only when the selection holds no running at all (e.g. cycling only) does it use the selected sport.
+  const runOnly = runs.filter(r => isRunSport(r.sport)), lr = runOnly.length ? runOnly : runs;
+  const lwk = new Map(); lr.forEach(r => { const k = ymdStr(monday(r.date)); lwk.set(k, (lwk.get(k)||0) + r.km); });
+  const full = weeks.slice(0, -1).map(w => ({start: w.start, km: lwk.get(ymdStr(w.start)) || 0}));   // leave out the last (possibly incomplete) week as 'last week'
   const lastW = full[full.length-1], prev4 = full.slice(-5,-1);
   const prev4avg = prev4.length ? prev4.reduce((a,w)=>a+w.km,0)/prev4.length : null;
-  const longest4 = Math.max(0, ...inLast(28).map(r=>r.km));
+  const lIn = days => lr.filter(r => r.date >= refEnd - days*DAY && r.date < refEnd);
+  const longest4 = Math.max(0, ...lIn(28).map(r=>r.km)), loadKm4w = lIn(28).reduce((a,r)=>a+r.km,0);
   // history, as in the running plan: the best 8-week average of the last 2 years and how regularly there was activity.
   // For someone with a history, a week within what they sustained before is no spike, even when a recent break
   // pulls the 4-week average down (Frandsen 2025: week-to-week changes were not linked to injuries; Impellizzeri 2020)
   // shared with the running plan, at the same moment (the end of today) unless the data is old (then: at its last day)
   const tomorrow = addDays(dayStart(new Date()), 1);
-  const sig = trainingSignals(runs, tomorrow - refEnd <= 28*DAY ? tomorrow : refEnd);
+  const sig = trainingSignals(lr, tomorrow - refEnd <= 28*DAY ? tomorrow : refEnd);
   const block = sig.block, experienced = sig.experienced;
 
   return {runs, ref, refEnd, weeks, years, monthArr, seasonAvg, quarters:[...quarters.values()], curVdot, bestRecent: recentV[0],
-    acute, chronic, acwr, block, experienced, sig, z8, zTot, effNow, effPrev, effYearAgo, last12, maxGap, streak, lastW, prev4avg, longest4,
+    acute, chronic, acwr, block, experienced, sig, z8, zTot, effNow, effPrev, effYearAgo, last12, maxGap, streak, lastW, prev4avg, longest4, loadKm4w, loadRunning: lr === runOnly,
     km4w: kmIn(28), km12w: kmIn(84), ...deepAnalyse(runs, ref, refEnd, monthArr, inLast)};
 }
 
@@ -985,11 +991,11 @@ function renderAdvice(A){
   // with a history, the baseline is the higher of the 4-week average and what was sustained before (best 8 weeks of
   // the last 2 years), so quieter weeks or a break do not turn a normal week into a "spike"
   const usual = km => A.experienced && km <= A.block * 1.1;
-  const {histBase, base, ratio} = A.sig;
+  const {histBase, base, ratio} = A.sig, ofRun = A.loadRunning ? ' of running' : '';
   if (ratio != null){
     const t = histBase
-      ? `Last 7 days ${fmtNum(A.sig.acute,1)} km vs. the ${fmtNum(A.block,1)} km/week you sustained before (ratio ${fmtNum(ratio,2)}); your 4-week average of ${fmtNum(A.sig.chronic,1)} km is lower because of quieter weeks.`
-      : `Last 7 days ${fmtNum(A.sig.acute,1)} km vs. an average of ${fmtNum(A.sig.chronic,1)} km/week over 4 weeks (ratio ${fmtNum(ratio,2)}).`;
+      ? `Last 7 days ${fmtNum(A.sig.acute,1)} km${ofRun} vs. the ${fmtNum(A.block,1)} km/week you sustained before (ratio ${fmtNum(ratio,2)}); your 4-week average of ${fmtNum(A.sig.chronic,1)} km is lower because of quieter weeks.`
+      : `Last 7 days ${fmtNum(A.sig.acute,1)} km${ofRun} vs. an average of ${fmtNum(A.sig.chronic,1)} km/week over 4 weeks (ratio ${fmtNum(ratio,2)}).`;
     if (histBase && ratio <= 1.3 && A.sig.plainRatio > 1.3) add('good','Back to your usual volume', t + ` Large studies did not link week-to-week changes to injuries; single ${noun(true)} much longer than usual matter more.`);
     else if (ratio > 1.5) add('bad','Load rising too fast', t + ' Above 1.5 the injury risk clearly increases. Keep next week at or below your 4-week average.');
     else if (ratio > 1.3) add('warn','Solid build-up', t + ' Fine for a short period, but plan an easier week within 1–2 weeks.');
@@ -1000,11 +1006,12 @@ function renderAdvice(A){
     const prevBase = A.experienced ? Math.max(A.prev4avg, A.block) : A.prev4avg;   // same baseline as above
     const ch = A.lastW.km/prevBase - 1;
     if (ch > 0.25 && usual(A.lastW.km)) { /* back to a level sustained before: covered by the load advice above */ }
-    else if (ch > 0.25) add('warn','Big jump in weekly volume', `Last week ${fmtNum(A.lastW.km,1)} km, ${fmtNum(ch*100)}% above ${prevBase > A.prev4avg ? `the ${fmtNum(prevBase,0)} km/week you sustained before` : 'the average of the 4 weeks before'}. Keep increases around 10%.`);
+    else if (ch > 0.25) add('warn','Big jump in weekly volume', `Last week ${fmtNum(A.lastW.km,1)} km${ofRun}, ${fmtNum(ch*100)}% above ${prevBase > A.prev4avg ? `the ${fmtNum(prevBase,0)} km/week you sustained before` : 'the average of the 4 weeks before'}. Keep increases around 10%.`);
   }
-  const usualWeekKm = A.experienced ? Math.max(A.km4w/4, Math.min(A.block, A.km4w/4 * 2)) : A.km4w/4;   // a break does not make the long run 'heavy'
-  if (A.km4w > 0 && A.longest4 / usualWeekKm > 0.4 && A.longest4 > 12)
-    add('warn', `Long ${noun(false)} relatively heavy`, `Your longest ${noun(false)} (${fmtNum(A.longest4,1)} km) is more than 40% of your average weekly volume. More short easy km during the week makes the long ${noun(false)} safer.`);
+  const lk = A.loadKm4w / 4, usualWeekKm = A.experienced ? Math.max(lk, Math.min(A.block, lk * 2)) : lk;   // a break does not make the long run 'heavy'
+  const ln = A.loadRunning ? 'run' : noun(false);   // distance advice counts running only (see analyse)
+  if (lk > 0 && A.longest4 / usualWeekKm > 0.4 && A.longest4 > 12)
+    add('warn', `Long ${ln} relatively heavy`, `Your longest ${ln} (${fmtNum(A.longest4,1)} km) is more than 40% of your average weekly volume. More short easy km during the week makes the long ${ln} safer.`);
   if (A.zTot > 3*3600){
     const easy = A.z8[0]/A.zTot, mid = A.z8[1]/A.zTot;
     if (easy < 0.65) add('warn','Few truly easy sessions', `Only ${fmtNum(easy*100)}% of your running time (8 wk) was easy (below ${P.aet} bpm), ${fmtNum(mid*100)}% moderate. Most endurance runners improve best with ~75–80% easy and a few targeted hard sessions.`);
