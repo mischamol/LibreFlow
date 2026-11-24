@@ -117,11 +117,20 @@ are in `CLAUDE.local.md`, which is not in git.
   (fatigue), ≥ 14 days off. Feasibility (time, volume, long run, target VDOT) → status, Analysis advice and an
   alert() once when it turns infeasible after a new activity; `PLAN.log` keeps the last 20 updates. Every session
   has a "Why" with numbered sources (`PLAN_SRC`). App tab 4 = page view `plan`.
+  **Plan and Analysis must always use the same rules**: both take their signals from `trainingSignals(list, asOf)`
+  (acute/chronic, block, experienced, load ratio vs max(4-week avg, block), gap49, effDrop, Banister form via
+  `formSeries`) at the same moment (end of today; Analysis falls back to its last activity day when the data is > 28
+  days old). The plan's flags: spike = ratio > 1.3, fatigue = effDrop or form < −40% (break-nuanced text). Change a
+  rule there, never in one view only.
   Analysis advice uses the same history baseline (`analyse()` → `block` = best 8-week avg of 2 years, `experienced` =
   ≥ 12 of 24 months with ≥ 4 activities): load ratio and weekly jump compare with max(4-week avg, block) for
   experienced runners ("Back to your usual volume" when the plain ratio > 1.3 but vs. block ≤ 1.3), and the long-run
   share uses max(4-week avg, min(block, 2× 4-week avg)). Checked on the user's data: 47.3 km vs block 42.1 → 1.12. `analyse()` builds weeks
   with calendar days keyed by `ymdStr` (the old ms stepping lost weeks around DST: ~95 km/year in a test).
+  Every Analysis advice shows "Based on: [n]" (`SRC_OF` maps titles to `PLAN_SRC` keys; list in the Advice card's
+  Sources) or "Rule of thumb" where no study backs the exact limit. Fitness/fatigue = Banister impulse-response with
+  TRIMP (Morton 1990; limits per Hellard 2006), 42/7-day constants are a software convention, the −20/−40% form
+  limits a rule of thumb; after a 10+ day gap in the last 7 weeks it says "Fatigue after your break" (warn).
   Latest Activity / All Activities show every sport (speed km/h and no shoes for non-shoe sports; sport filter);
   Analysis has its own selector at the top (All activities, default, or one sport; `ANA_SPORT`, localStorage);
   pace-based parts (pace, efficiency, VDOT, predictions, best efforts, cadence) only use running sports. No sport

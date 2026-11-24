@@ -247,6 +247,7 @@ ol{padding-left:20px}
     <h2>Advice</h2>
     <p class="hint" id="adviceRef"></p>
     <div class="advice" id="advice"></div>
+    <details style="margin-top:8px"><summary>Sources</summary><ol id="adviceSources" style="font-size:13px"></ol></details>
   </section>
   <div class="kpis" id="kpis"></div>
 
@@ -791,6 +792,58 @@ const runVdot = r => {
   return v;
 };
 
+/* ---------- shared training signals ----------
+   Analysis advice AND the running plan both use exactly these functions, so they always agree (same windows, same
+   history baseline, same fitness/fatigue model). Change the rules here, not in one of the two views. */
+function formSeries(until){   // Banister fitness/fatigue from TRIMP of all activities, per calendar day before `until`
+  const load = []; if (!ALL.length) return load;
+  const daily = new Map();
+  ALL.forEach(s => { if (s.date < until){ const k = +dayStart(s.date); daily.set(k, (daily.get(k)||0) + trimp(s)); } });
+  let ctl = 0, atl = 0;
+  for (let x = dayStart(ALL[0].date); x < until; x = new Date(x.getFullYear(), x.getMonth(), x.getDate()+1)){   // calendar days (DST-safe)
+    const d = +x, t = daily.get(d) || 0; ctl += (t - ctl)/42; atl += (t - atl)/7;
+    load.push({d, ctl, atl, tsb: ctl - atl, t});
+  }
+  return load;
+}
+function trainingSignals(list, asOf){
+  const before = list.filter(r => r.date < asOf);
+  const span = (d0, d1) => before.filter(r => r.date >= asOf - d1*DAY && r.date < asOf - d0*DAY);
+  const km = l => l.reduce((a, r) => a + r.km, 0);
+  const acute = km(span(0, 7)), chronic = km(span(0, 28)) / 4;
+  // history: best 8-week average of the last 2 years (calendar weeks) and how regularly there was activity
+  const wk = new Map(), months = {};
+  span(0, 730).forEach(r => { const k = ymdStr(monday(r.date)); wk.set(k, (wk.get(k)||0) + r.km);
+    const m = r.date.getFullYear()*12 + r.date.getMonth(); months[m] = (months[m]||0) + 1; });
+  const mons = [];
+  for (let d = monday(new Date(asOf - 730*DAY)); d <= asOf; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7)) mons.push(d);
+  let block = 0, blockEnd = null;
+  for (let i = 7; i < mons.length; i++){
+    let sum = 0; for (let j = 0; j < 8; j++) sum += wk.get(ymdStr(mons[i - j])) || 0;
+    if (sum / 8 > block){ block = sum / 8; blockEnd = new Date(mons[i].getFullYear(), mons[i].getMonth(), mons[i].getDate() + 6); }
+  }
+  const activeMonths = Object.values(months).filter(n => n >= 4).length;
+  const experienced = activeMonths >= 12 && block > 0;
+  // load: last 7 days vs the higher of the 4-week average and (with a history) what was sustained before
+  const histBase = experienced && block > chronic, base = histBase ? block : chronic;
+  const ratio = base > 0 ? acute / base : null, plainRatio = chronic > 0 ? acute / chronic : null;
+  // longest gap in the last 7 weeks (a break), including the days since the last activity
+  const recent = span(0, 49), last = before[before.length - 1];
+  let gap49 = recent.length ? (recent[0].date - (asOf - 49*DAY)) / DAY : 49;
+  for (let i = 1; i < recent.length; i++) gap49 = Math.max(gap49, (recent[i].date - recent[i-1].date) / DAY);
+  if (last) gap49 = Math.max(gap49, Math.min(49, (asOf - last.date) / DAY));
+  // short-term fatigue: running metres per heartbeat in the last 2 weeks vs the 8 weeks before (Buchheit 2014)
+  const ef = r => isRunSport(r.sport) ? (r.deep?.ef || (r.hrAvg && okPace(r) && r.km >= 3 ? (r.km*1000/r.sec*60) / r.hrAvg : null)) : null;
+  const effNow = median(span(0, 14).map(ef).filter(Boolean)), effBase = median(span(14, 70).map(ef).filter(Boolean));
+  const nEff = span(0, 14).filter(ef).length;
+  const effDrop = effNow && effBase && nEff >= 2 && effNow < effBase * 0.95 ? 1 - effNow / effBase : 0;
+  // fitness / fatigue / form (all sports)
+  const L = formSeries(asOf).at(-1);
+  const form = L && L.ctl > 5 ? {ctl: L.ctl, atl: L.atl, tsb: L.tsb, r: L.tsb / L.ctl} : null;
+  return {acute, chronic, block, blockEnd, activeMonths, experienced, histBase, base, ratio, plainRatio, gap49,
+    effNow, effBase, nEff, effDrop, form, daysSince: last ? (asOf - last.date) / DAY : null};
+}
+
 function analyse(runs){
   const ref = dayStart(runs[runs.length-1].date);
   const refEnd = new Date(ref.getTime()+DAY);
@@ -865,28 +918,20 @@ function analyse(runs){
   // history, as in the running plan: the best 8-week average of the last 2 years and how regularly there was activity.
   // For someone with a history, a week within what they sustained before is no spike, even when a recent break
   // pulls the 4-week average down (Frandsen 2025: week-to-week changes were not linked to injuries; Impellizzeri 2020)
-  let block = 0;
-  const recentW = weeks.filter(w => w.start >= refEnd - 730*DAY);
-  for (let i = 7; i < recentW.length; i++) block = Math.max(block, recentW.slice(i-7, i+1).reduce((a,w)=>a+w.km,0)/8);
-  const monthCounts = {}; runs.filter(r => r.date >= refEnd - 730*DAY).forEach(r => { const k = r.date.getFullYear()*12 + r.date.getMonth(); monthCounts[k] = (monthCounts[k]||0) + 1; });
-  const experienced = Object.values(monthCounts).filter(n => n >= 4).length >= 12 && block > 0;
+  // shared with the running plan, at the same moment (the end of today) unless the data is old (then: at its last day)
+  const tomorrow = addDays(dayStart(new Date()), 1);
+  const sig = trainingSignals(runs, tomorrow - refEnd <= 28*DAY ? tomorrow : refEnd);
+  const block = sig.block, experienced = sig.experienced;
 
   return {runs, ref, refEnd, weeks, years, monthArr, seasonAvg, quarters:[...quarters.values()], curVdot, bestRecent: recentV[0],
-    acute, chronic, acwr, block, experienced, z8, zTot, effNow, effPrev, effYearAgo, last12, maxGap, streak, lastW, prev4avg, longest4,
+    acute, chronic, acwr, block, experienced, sig, z8, zTot, effNow, effPrev, effYearAgo, last12, maxGap, streak, lastW, prev4avg, longest4,
     km4w: kmIn(28), km12w: kmIn(84), ...deepAnalyse(runs, ref, refEnd, monthArr, inLast)};
 }
 
 function deepAnalyse(runs, ref, refEnd, monthArr, inLast){
   const deepN = runs.filter(r => r.deep).length;
   // fitness / fatigue from TRIMP of ALL activities (all sports load the body)
-  const daily = new Map();
-  ALL.forEach(s => { const k = +dayStart(s.date); daily.set(k, (daily.get(k)||0) + trimp(s)); });
-  const load = []; let ctl = 0, atl = 0;
-  // step by calendar day (not 24 h) so summer/winter time does not shift the keys
-  for (let x = dayStart(ALL[0].date); x <= ref; x = new Date(x.getFullYear(), x.getMonth(), x.getDate()+1)){
-    const d = +x, t = daily.get(d) || 0; ctl += (t - ctl)/42; atl += (t - atl)/7;
-    load.push({d, ctl, atl, tsb: ctl - atl, t});
-  }
+  const load = formSeries(refEnd);   // shared with the advice and the running plan
   const L = load[load.length-1];
   // per month: decoupling, running index, cadence
   monthArr.forEach(m => { m.dec = []; m.ri = []; m.cad = []; });
@@ -940,16 +985,15 @@ function renderAdvice(A){
   // with a history, the baseline is the higher of the 4-week average and what was sustained before (best 8 weeks of
   // the last 2 years), so quieter weeks or a break do not turn a normal week into a "spike"
   const usual = km => A.experienced && km <= A.block * 1.1;
-  const histBase = A.experienced && A.block > A.chronic;
-  const base = histBase ? A.block : A.chronic, ratio = base > 0 ? A.acute / base : null;
+  const {histBase, base, ratio} = A.sig;
   if (ratio != null){
     const t = histBase
-      ? `Last 7 days ${fmtNum(A.acute,1)} km vs. the ${fmtNum(A.block,1)} km/week you sustained before (ratio ${fmtNum(ratio,2)}); your 4-week average of ${fmtNum(A.chronic,1)} km is lower because of quieter weeks.`
-      : `Last 7 days ${fmtNum(A.acute,1)} km vs. an average of ${fmtNum(A.chronic,1)} km/week over 4 weeks (ratio ${fmtNum(ratio,2)}).`;
-    if (histBase && ratio <= 1.3 && A.acwr > 1.3) add('good','Back to your usual volume', t + ` Large studies did not link week-to-week changes to injuries; single ${noun(true)} much longer than usual matter more.`);
+      ? `Last 7 days ${fmtNum(A.sig.acute,1)} km vs. the ${fmtNum(A.block,1)} km/week you sustained before (ratio ${fmtNum(ratio,2)}); your 4-week average of ${fmtNum(A.sig.chronic,1)} km is lower because of quieter weeks.`
+      : `Last 7 days ${fmtNum(A.sig.acute,1)} km vs. an average of ${fmtNum(A.sig.chronic,1)} km/week over 4 weeks (ratio ${fmtNum(ratio,2)}).`;
+    if (histBase && ratio <= 1.3 && A.sig.plainRatio > 1.3) add('good','Back to your usual volume', t + ` Large studies did not link week-to-week changes to injuries; single ${noun(true)} much longer than usual matter more.`);
     else if (ratio > 1.5) add('bad','Load rising too fast', t + ' Above 1.5 the injury risk clearly increases. Keep next week at or below your 4-week average.');
     else if (ratio > 1.3) add('warn','Solid build-up', t + ' Fine for a short period, but plan an easier week within 1–2 weeks.');
-    else if (ratio < 0.7 && A.chronic > 5) add('info','Easy week', t + ' Good as a recovery or taper week; if it lasts longer, build up gradually again (max ~10% per week).');
+    else if (ratio < 0.7 && A.sig.chronic > 5) add('info','Easy week', t + ' Good as a recovery or taper week; if it lasts longer, build up gradually again (max ~10% per week).');
     else add('good','Load in balance', t + ' You are in the safe zone (0.8–1.3).');
   }
   if (A.lastW && A.prev4avg > 5){
@@ -974,6 +1018,7 @@ function renderAdvice(A){
     else if (d < -0.04) add('warn','Efficiency dropping', `${fmtNum(-d*100,1)}% fewer metres per heartbeat than the 6 months before${ya}. Could be heat, fatigue, illness or less volume – watch recovery and sleep.`);
     else add('info','Aerobic fitness stable', `Metres per heartbeat: ${fmtNum(A.effNow,2)} now vs ${fmtNum(A.effPrev,2)} before${ya}.`);
   }
+  if (A.sig.effDrop) add('warn','Fatigue signal', `Your metres per heartbeat in the last 2 weeks are ${fmtNum(A.sig.effDrop*100,0)}% lower than in the 8 weeks before (fatigue, heat or illness). Keep the hard sessions easy this week; the running plan does the same.`);
   if (A.maxGap > 10) add('info','Break', `In the last 12 weeks there was a gap of ${Math.round(A.maxGap)} days. After a break: first 1–2 weeks at ~70% of your previous volume.`);
   if (A.streak >= 10) add('warn','No rest day', `You have trained ${A.streak} days in a row. Plan at least one rest day per week.`);
   const runsPw = A.last12.length/12;
@@ -982,9 +1027,13 @@ function renderAdvice(A){
   if (Object.keys(A.years).length >= 3) add('info','Your seasonal pattern', `Historically you ${verb()} most in ${MONTHS[highM]} (${fmtNum(s[highM])} km) and least in ${MONTHS[lowM]} (${fmtNum(s[lowM])} km). Plan target races where your build-up is naturally good.`);
 
   // --- from the 1 s data ---
-  if (A.L && A.L.ctl > 5){
-    const r = A.L.tsb / A.L.ctl, t = `Fitness ${fmtNum(A.L.ctl)}, fatigue ${fmtNum(A.L.atl)}, form ${fmtNum(A.L.tsb)}.`;
-    if (r < -0.4) add('bad','A lot of fatigue built up', t + ' Your fatigue is well above your fitness. Plan a few easy days before training hard again.');
+  if (A.sig.form){   // the same model and limits as the running plan (trainingSignals)
+    const F = A.sig.form, r = F.r, t = `Fitness ${fmtNum(F.ctl)}, fatigue ${fmtNum(F.atl)}, form ${fmtNum(F.tsb)}.`;
+    // a break of 10+ days in the last 7 weeks: in this model 'fitness' drops during the break, so a normal week
+    // afterwards quickly reads as high fatigue
+    const gap49 = A.sig.gap49;
+    if (r < -0.4 && gap49 >= 10) add('warn','Fatigue after your break', t + ` In this model fitness drops during a break (${Math.round(gap49)} days), so a normal week afterwards quickly shows as high fatigue. Keep the next days easy and build up as usual; it does not mean you are overtrained.`);
+    else if (r < -0.4) add('bad','A lot of fatigue built up', t + ' Your fatigue is well above your fitness. Plan a few easy days before training hard again.');
     else if (r < -0.2) add('warn','You are building up', t + ' A productive training stimulus, but do not keep this up for more than 2–3 weeks without an easier week.');
     else if (r > 0.25) add('info','Rested', t + ' A good moment for a race or test; if it stays like this for long, your fitness slowly drops.');
     else add('good','Load and recovery in balance', t);
@@ -1003,7 +1052,7 @@ function renderAdvice(A){
     const d = A.riNow - A.riYear;
     add(d >= 1 ? 'good' : d <= -2 ? 'warn' : 'info', 'Polar running index', `Now ${fmtNum(A.riNow)} (median 8 wk), a year ago ${fmtNum(A.riYear)}.`);
   }
-  if (A.cadNow && A.cadNow < 160) add('info','Cadence', `Median ${fmtNum(A.cadNow)} steps/min. Slightly shorter, quicker steps (+5%) often reduce the load on knees and hips.`);
+  if (A.cadNow && A.cadNow < 160) add('info','Cadence', `Median ${fmtNum(A.cadNow)} steps/min. Slightly shorter, quicker steps lower the load: +5% step rate reduced knee loading, +10% also hip loading.`);
 
   // shoes past their reminder distance: repeated after every run until the shoes are retired or the reminder is raised
   const sst = shoeStats();
@@ -1015,7 +1064,29 @@ function renderAdvice(A){
   if (PLAN_OUT && PLAN_OUT.level === 2) add('bad', 'Running goal not feasible as planned', `${PLAN_OUT.status.filter(x => x.lvl === 'bad').map(x => x.t + ': ' + x.x).join(' ')} See the Running Plan tab.`);
   else if (PLAN_OUT && PLAN_OUT.level === 1) add('warn', 'Running goal: caveats', `${PLAN_OUT.status.filter(x => x.lvl === 'warn').map(x => x.t).join('; ')}. See the Running Plan tab.`);
   const order = {bad:0, warn:1, good:2, info:3};
-  $('#advice').innerHTML = out.sort((a,b)=>order[a.lvl]-order[b.lvl]).map((o,i) => `<details class="adv ${o.lvl}"${i === 0 ? ' open' : ''}><summary>${o.t}</summary><div>${o.x}</div></details>`).join('') || '<p>Too little recent data for advice.</p>';
+  // where each piece of advice comes from: numbered sources (same list as the running plan), or a plain
+  // "rule of thumb" when no study backs that exact limit
+  const RULE = 'rule', SRC_OF = [
+    [/^Back to your usual volume/, ['FRANDSEN2025', 'IMPELLIZZERI2020']],
+    [/^(Load rising too fast|Solid build-up|Easy week|Load in balance)/, ['GABBETT2016', 'IMPELLIZZERI2020']],
+    [/^Big jump/, ['NIELSEN2014', 'BUIST2008', 'FRANDSEN2025']],
+    [/^(Few truly easy|Good intensity|Intensity)/, ['SEILER2006', 'STOGGL2014', 'CASADO2021']],
+    [/^(Aerobic fitness|Efficiency dropping|Fatigue signal)/, ['BUCHHEIT2014']],
+    [/^Break/, ['COYLE1984', 'MUJIKA2000']],
+    [/^(A lot of fatigue|Fatigue after|You are building up|Rested|Load and recovery)/, ['MORTON1990', 'HELLARD2006']],
+    [/^Cadence/, ['HEIDERSCHEIT2011']],
+    [/^(Long .* relatively heavy|No rest day|Frequency|Strong aerobic base|Heart rate drifts|Aerobic decoupling|Shoes)/, RULE],
+  ];
+  const used = new Set();
+  const aCite = keys => keys.map(k => { used.add(k); return `<sup><a href="#asrc-${k}">[${PLAN_SRC_KEYS.indexOf(k) + 1}]</a></sup>`; }).join('');
+  const srcNote = o => {
+    const m = SRC_OF.find(([re]) => re.test(o.t)); if (!m) return '';
+    const limit = /fatigue|building up|Rested|Load and recovery/i.test(o.t) ? ' The limits (form below −20% / −40% of fitness) are a rule of thumb; the model is useful as a trend, its exact numbers less so.' : '';
+    return `<p class="hint" style="margin:6px 0 0">${m[1] === RULE ? 'Rule of thumb: no study behind this exact limit.' : 'Based on: ' + aCite(m[1]) + limit}</p>`;
+  };
+  $('#advice').innerHTML = out.sort((a,b)=>order[a.lvl]-order[b.lvl]).map((o,i) => `<details class="adv ${o.lvl}"${i === 0 ? ' open' : ''}><summary>${o.t}</summary><div>${o.x}${srcNote(o)}</div></details>`).join('') || '<p>Too little recent data for advice.</p>';
+  $('#adviceSources').innerHTML = [...used].sort((a, b) => PLAN_SRC_KEYS.indexOf(a) - PLAN_SRC_KEYS.indexOf(b))
+    .map(k => `<li value="${PLAN_SRC_KEYS.indexOf(k) + 1}" id="asrc-${k}">${escH(PLAN_SRC[k])}</li>`).join('') || '<li>None for the current advice.</li>';
 }
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -1498,6 +1569,9 @@ const PLAN_SRC = {
   MUJIKA2000: 'Mujika I, Padilla S. Detraining: loss of training-induced physiological and performance adaptations. Part I and Part II. Sports Med 2000;30:79–87 and 145–154.',
   COYLE1984: 'Coyle EF, Martin WH, Bloomfield SA, Lowry OH, Holloszy JO. Time course of loss of adaptations after stopping prolonged intense endurance training. J Appl Physiol 1984;57:1857–1864.',
   MILANOVIC2015: 'Milanović Z, Sporiš G, Weston M. Effectiveness of high-intensity interval training (HIT) and continuous endurance training for VO2max improvements: a systematic review and meta-analysis of controlled trials. Sports Med 2015;45:1469–1481. doi:10.1007/s40279-015-0365-0',
+  MORTON1990: 'Morton RH, Fitz-Clarke JR, Banister EW. Modeling human performance in running. J Appl Physiol 1990;69:1171–1177. doi:10.1152/jappl.1990.69.3.1171 (fitness–fatigue model, TRIMP)',
+  HELLARD2006: 'Hellard P, Avalos M, Lacoste L, Barale F, Chatard JC, Millet GP. Assessing the limitations of the Banister model in monitoring training. J Sports Sci 2006;24:509–520. doi:10.1080/02640410500244697',
+  HEIDERSCHEIT2011: 'Heiderscheit BC, Chumanov ES, Michalski MP, Wille CM, Ryan MB. Effects of step rate manipulation on joint mechanics during running. Med Sci Sports Exerc 2011;43:296–302. doi:10.1249/MSS.0b013e3181ebedf4',
   BLAGROVE2018: 'Blagrove RC, Howatson G, Hayes PR. Effects of strength training on the physiological determinants of middle- and long-distance running performance: a systematic review. Sports Med 2018;48:1117–1149.',
 };
 const PLAN_SRC_KEYS = Object.keys(PLAN_SRC);
@@ -1543,21 +1617,11 @@ function planMetrics(asOf){   // running before asOf (exclusive)
   const vs = span(0, 120).map(runVdot).filter(Boolean);
   const ef = r => r.deep?.ef || (r.hrAvg && okPace(r) && r.km >= 3 ? (r.km * 1000 / r.sec * 60) / r.hrAvg : null);
   const last = runs[runs.length - 1];
-  // longer history (2 years): the best 8-week block you sustained, how regularly you ran, your best fitness then
-  const hist = span(0, 730), wk = new Map(), months = new Map();
-  const curM = asOf.getFullYear() * 12 + asOf.getMonth();
-  hist.forEach(r => { const k = ymdStr(monday(r.date)); wk.set(k, (wk.get(k) || 0) + r.km);
-    const mk = r.date.getFullYear() * 12 + r.date.getMonth(); if (mk > curM - 24) months.set(mk, (months.get(mk) || 0) + 1); });
-  const mons = [];   // Mondays by calendar date (not by milliseconds: daylight saving time shifts those)
-  for (let d = monday(new Date(asOf - 730 * DAY)); d <= asOf; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7)) mons.push(d);
-  let block = 0, blockEnd = null;
-  for (let i = 7; i < mons.length; i++){
-    let sum = 0; for (let j = 0; j < 8; j++) sum += wk.get(ymdStr(mons[i - j])) || 0;
-    if (sum / 8 > block){ block = sum / 8; blockEnd = new Date(mons[i].getFullYear(), mons[i].getMonth(), mons[i].getDate() + 6); }
-  }
+  // longer history (2 years): the best 8-week block and how regularly you ran come from trainingSignals (shared with
+  // the Analysis advice); your best fitness then
+  const hist = span(0, 730), sig = trainingSignals(runs, asOf), {block, blockEnd, activeMonths, experienced} = sig;
   const hv = hist.map(r => [runVdot(r), r]).filter(x => x[0]).sort((a, b) => b[0] - a[0])[0];
-  const activeMonths = [...months.values()].filter(n => n >= 4).length;
-  return {block, blockEnd, activeMonths, experienced: activeMonths >= 12 && block > 0, histV: hv ? hv[0] : null, histVDate: hv ? hv[1].date : null,
+  return {block, blockEnd, activeMonths, experienced, histV: hv ? hv[0] : null, histVDate: hv ? hv[1].date : null,
     chronic: km(span(0, 28)) / 4, prior: km(span(28, 56)) / 4, acute: km(span(0, 7)), longest30: Math.max(0, ...span(0, 30).map(r => r.km)),
     V: vs.length ? Math.max(...vs) : null, effNow: median(span(0, 14).map(ef).filter(Boolean)), effBase: median(span(14, 70).map(ef).filter(Boolean)),
     nEff: span(0, 14).filter(ef).length, daysSince: last ? (asOf - last.date) / DAY : null, last};
@@ -1666,18 +1730,22 @@ function buildPlan(now){
   if (race < today){ status.push({lvl: 'info', t: 'Race day has passed', x: 'Set a new goal to get a new plan.', src: []}); return out; }
 
   // flags from the most recent days (they change the rest of this week)
-  const acwr = mNow.chronic > 0 ? mNow.acute / mNow.chronic : null;
-  // for an experienced runner a week within the volume sustained before is no spike, even when the 4-week average is
-  // low after a break: the ratio is a rough guide (Impellizzeri 2020) and week-to-week changes were not linked to
-  // injuries in a large cohort (Frandsen 2025)
-  const usualWeek = mWeek.experienced && mNow.acute <= mWeek.block * 1.1;
-  const spike = acwr != null && acwr > 1.3 && mNow.acute > 15 && !usualWeek;
-  if (acwr != null && acwr > 1.3 && mNow.acute > 15 && usualWeek)
-    reasons.push({t: `${fmtNum(mNow.acute, 0)} km in the last 7 days is well above your 4-week average (${fmtNum(mNow.chronic, 0)} km), but in line with the ${fmtNum(mWeek.block, 0)} km/week you sustained before, so it counts as a normal week, not as a load spike.`, src: ['FRANDSEN2025', 'IMPELLIZZERI2020']});
-  const fatigue = mNow.effNow && mNow.effBase && mNow.nEff >= 2 && mNow.effNow < mNow.effBase * 0.95;
+  // the same signals as the Analysis advice (trainingSignals): load vs the higher of the 4-week average and what was
+  // sustained before, short-term efficiency drop, and the fitness/fatigue model
+  const sig = trainingSignals(ALL.filter(x => isRunSport(x.sport)), addDays(today, 1));
+  const acwr = sig.ratio;
+  const spike = sig.ratio != null && sig.ratio > 1.3 && sig.acute > 15;
+  const usualWeek = !spike && sig.histBase && sig.plainRatio > 1.3 && sig.acute > 15;
+  if (usualWeek)
+    reasons.push({t: `${fmtNum(sig.acute, 0)} km in the last 7 days is well above your 4-week average (${fmtNum(sig.chronic, 0)} km), but in line with the ${fmtNum(sig.block, 0)} km/week you sustained before, so it counts as a normal week, not as a load spike.`, src: ['FRANDSEN2025', 'IMPELLIZZERI2020']});
+  const formLow = sig.form && sig.form.r < -0.4, afterBreak = sig.gap49 >= 10;
+  const fatigue = sig.effDrop > 0 || formLow;
   const restart = mNow.daysSince != null && mNow.daysSince >= 14;
-  if (spike) reasons.push({t: `Load spike: ${fmtNum(mNow.acute, 1)} km in the last 7 days is ${fmtNum(acwr, 1)}× your 4-week average. The rest of this week is easy and the long run does not grow.`, src: ['GABBETT2016', 'IMPELLIZZERI2020']});
-  if (fatigue) reasons.push({t: `Fatigue signal: your metres per heartbeat in the last 2 weeks are ${fmtNum((1 - mNow.effNow / mNow.effBase) * 100, 0)}% lower than in the 8 weeks before (fatigue, heat or illness). Hard sessions this week become easy runs.`, src: ['BUCHHEIT2014']});
+  if (spike) reasons.push({t: `Load spike: ${fmtNum(sig.acute, 1)} km in the last 7 days is ${fmtNum(acwr, 1)}× ${sig.histBase ? `the ${fmtNum(sig.block, 0)} km/week you sustained before` : 'your 4-week average'}. The rest of this week is easy and the long run does not grow.`, src: ['GABBETT2016', 'IMPELLIZZERI2020']});
+  if (formLow) reasons.push({t: afterBreak
+      ? `Fatigue after your break: form ${fmtNum(sig.form.tsb, 0)} (fitness ${fmtNum(sig.form.ctl, 0)}, fatigue ${fmtNum(sig.form.atl, 0)}); in this model fitness drops during a break, so a normal week afterwards reads as high fatigue. This week stays easy; it does not mean you are overtrained.`
+      : `A lot of fatigue built up: form ${fmtNum(sig.form.tsb, 0)} (fitness ${fmtNum(sig.form.ctl, 0)}, fatigue ${fmtNum(sig.form.atl, 0)}). Hard sessions this week become easy runs.`, src: ['MORTON1990', 'HELLARD2006']});
+  if (sig.effDrop) reasons.push({t: `Fatigue signal: your metres per heartbeat in the last 2 weeks are ${fmtNum(sig.effDrop * 100, 0)}% lower than in the 8 weeks before (fatigue, heat or illness). Hard sessions this week become easy runs.`, src: ['BUCHHEIT2014']});
   if (PLAN.lastV && mNow.V && Math.abs(mNow.V - PLAN.lastV) >= 0.5)
     reasons.push({t: `Fitness estimate ${mNow.V > PLAN.lastV ? 'up' : 'down'} from VDOT ${fmtNum(PLAN.lastV, 1)} to ${fmtNum(mNow.V, 1)}: training paces follow.`, src: ['DANIELS']});
 
