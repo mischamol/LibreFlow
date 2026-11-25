@@ -66,6 +66,20 @@ are in `CLAUDE.local.md`, which is not in git.
   (`PbRecordedZones`: 1 HR zone {1 limits {lo, hi}, 2 time in zone}, 4 speed zone {1 limits {lo, hi km/h float},
   2 time, 3 distance}); the app keeps it under Documents/watch/<id>/00/. Whether a Polar Flow sync restores the
   Flow zones is still unknown.
+  Routes (25 Nov 2026): /U/0/ROUTES/<n>/PROUTE.BPB = `PbPlannedRoute` (cmaion `planned_route.proto`): 1 {1 route id},
+  2 {1 name}, 3 float length m, 4 start PbLocation {1 lat, 2 lon doubles}, 5 float start altitude, 6 points {1 sint x,
+  2 sint y = metres east / north of the start (checked: 5 m median vs own GPS tracks), 3 time offset ms, 4 sint
+  altitude offset, 6 distance so far m}, 9 = 1, 10/11 created/modified PbSystemDateTime, 12 UUID string. Plus a route
+  favorite in FAV: TST {2 {1 name}, 6 {1: 3 ROUTE, 2 {1 sport}, 4 {}, 5 {1 route id}}}. Flow route: 466 points / 15 km.
+  `polar_ble.py route-build` (offline, GPX → files, Douglas–Peucker to ≤ 500 points, byte-identical re-encode of the
+  Flow route and favorite) and `route-put` (new ROUTES/<n+1>/ + next FAV slot, asks WRITE). Write test OK (25 Nov
+  2026, "Evening Run" → ROUTES/1 + FAV/05): shown on the watch. The watch computes the length from the stored points
+  (14.71 km vs 14.83 km GPX), so length/distance are now computed along the stored points.
+  Remove test (25 Nov 2026, `route-rm`): REMOVE of FAV/<nn>/ and ROUTES/<n>/ works (D2H notification 0202), but
+  ROUTES must stay contiguous like FAV: after removing ROUTES/1, route 2 and its favorite were hidden; moving
+  ROUTES/2/PROUTE.BPB unchanged to ROUTES/1 (`route-rm --fix-gaps`) brought both back. The favorite refers to the route
+  id, not the folder. Still unknown: a point limit (a 43 km route with ≤ 500 points worked) and whether a Flow sync
+  removes our routes.
   Writing (PSFTP PUT) is possible (SDK `PolarBleLowLevelApi.writeFile`) but NOT allowed without the user's explicit OK.
 - Known caveats: altitude looks uncalibrated; BASE field 11 (~20 m) may be ascent or descent, not verified.
 - Strava: file upload (TCX, manual at strava.com/upload/select) is free; the API (direct upload) needs a paid
@@ -92,6 +106,20 @@ are in `CLAUDE.local.md`, which is not in git.
   phased favorites (distance goals, HR zones for easy parts, pace zones for fast parts; encoder byte-identical to the
   favorite verified on the watch); one confirmation, one session; LibreFlow favorites (id ≥ 900000000) are replaced
   or removed and renumbered so FAV stays gapless; Flow favorites are never touched.
+  Settings › Watch › Routes (`RoutesView`, `BLE/WatchRoutes.swift`): a route library on the phone
+  (`RouteLibrary`, Documents/routes/library.json: `PlannedRoute` + checked + onWatch + source) with GPX imports
+  (track, else route) and routes from own runs (page `appRouteRuns()`, raw/<key>.json route), each simplified to ≤ 500
+  points; a check mark per route, rename, delete; Sync/Cancel button on the page too. The normal Sync (`WatchSync`)
+  ends with `RouteSync.reconcile`: checked routes are added at the end of ROUTES and FAV, unchecked/deleted LibreFlow
+  routes are removed (the last folder/favorite moves into the gap unchanged, both lists stay gapless; nothing is
+  changed when a Polar Flow item would have to move), renamed ones are rewritten in place; LibreFlow routes on the
+  watch the library does not know are adopted (checked). A ROUTES snapshot (folder, size, id, name) avoids reading
+  unchanged route files on every Sync. Polar Flow routes are listed, never changed. Encoder byte-identical to
+  `route-build` (3 GPX variants); add/remove from the app verified on the watch (25 Nov 2026). `WatchFavorites`
+  (plan) keeps LibreFlow route favorites (id ≥ 900000000 with target type 3): unchanged, or moved as-is to keep FAV
+  gapless; never removed. DEBUG hook: env `LIBREFLOW_TEST_GPX` (via `SIMCTL_CHILD_`) imports a GPX, as the
+  simulator's file picker cannot be driven. SideStore will not reinstall the same version: test IPAs with
+  `LF_VERSION=1.4.90 zsh tools/make_ipa.sh`.
   Sync Cancel: `PolarWatch.disconnect()` ends pending waits; the button resets at once.
   Plan: goal {dist 5k/10k/10mi/half/marathon/custom (+km), date, optional time, days/week, long-run day} in `PLAN` (store + backups).
   `buildPlan()` recomputes everything from the actual running on every refresh (volume from the 4-week average,

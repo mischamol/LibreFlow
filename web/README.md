@@ -29,7 +29,8 @@ Open it in Safari or Chrome (double-click it in the Finder) and load your Polar 
 
 ## polar_ble.py
 Bluetooth tool (Polar's PSFTP protocol). Reads files; with `--sync` it only sends Polar's sync start/stop
-notifications. Nothing on the watch is written or deleted.
+notifications. Reading writes or deletes nothing on the watch; only the write commands below (which ask you to
+type WRITE or REMOVE) do.
 
 ```
 python3 -m pip install bleak
@@ -53,6 +54,16 @@ Then open `libreflow.html` › Settings › Choose folder › `trainingen_json`.
 
 The folders it creates (`horloge_data/`, `horloge_dump/`, `trainingen_json/`) contain your trainings including
 GPS routes: keep them private (they are in `.gitignore`).
+
+### Routes
+`route-build` turns a GPX file into the watch's route files (offline); `route-put` writes them as a new route plus
+its favorite after you type WRITE; `route-rm` lists the routes and removes a LibreFlow route (type REMOVE), keeping
+the folders without gaps (`--fix-gaps` repairs a gap). The app does this at Sync for the routes you check under
+Settings › Watch › Routes.
+```
+python3 polar_ble.py route-build route.gpx route_out
+python3 polar_ble.py --sync route-put "Grit X" route_out
+```
 
 ### Platforms
 - macOS (CoreBluetooth): pairing, sync and reconnecting all work.

@@ -1,8 +1,9 @@
 import Foundation
 import UIKit
 
-/// Downloads every new training (/U/0/<date>/E/<time>/) from the watch, read-only and resumable,
-/// like `polar_ble.py --sync all`. Afterwards each new training is decoded for the analysis page.
+/// Downloads every new training (/U/0/<date>/E/<time>/) from the watch, resumable, like `polar_ble.py --sync all`
+/// (reading only), then makes the LibreFlow routes on the watch match the checked routes (`RouteSync`: the only
+/// writes, chosen by the user in Settings › Watch › Routes). Afterwards each new training is decoded for the analysis page.
 @MainActor
 final class WatchSync: ObservableObject {
     @Published var running = false
@@ -90,6 +91,11 @@ final class WatchSync: ObservableObject {
                 }
             }
             store.saveCheckedDays(checked)
+            // routes: make the LibreFlow routes on the watch match the checked ones (Settings › Watch › Routes)
+            try Task.checkCancellation()
+            do { try await RouteSync.reconcile(w) { self.log($0) } }
+            catch is CancellationError { throw CancellationError() }
+            catch { log("Routes: stopped (\(error.localizedDescription)); the next Sync tries again.") }
             try await w.stopSync()
             w.disconnect()
             progress = 1

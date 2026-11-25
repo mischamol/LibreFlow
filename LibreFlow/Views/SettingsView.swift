@@ -97,13 +97,14 @@ struct SettingsView: View {
 
                 // --- watch ---
                 Section {
+                    NavigationLink { RoutesView() } label: { Label("Routes", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
                     Button(forgotWatch ? "Watch forgotten" : "Forget paired watch") {
                         PolarWatch.savedIdentifier = nil
                         forgotWatch = true
                     }
                     .disabled(forgotWatch || PolarWatch.savedIdentifier == nil)
                 } header: { Text("Watch") } footer: {
-                    Text("Sync reads only from the watch. To remove the pairing completely, also remove the iPhone on the watch and in iOS Settings › Bluetooth.")
+                    Text("Routes: GPX files and your own runs; the checked ones go to the watch at the next Sync. To remove the pairing completely, also remove the iPhone on the watch and in iOS Settings › Bluetooth.")
                 }
 
                 // --- delete ---

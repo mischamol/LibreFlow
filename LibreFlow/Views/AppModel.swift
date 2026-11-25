@@ -214,6 +214,21 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         return ((d["sessions"] as? [[String: Any]] ?? []).compactMap(PlanFavorite.init), nil)
     }
 
+    /// Settings › Watch › Routes › From a run: newest activities that have a GPS route in the raw data.
+    struct RunChoice: Identifiable { var key: String, date: String, time: String, sport: String, km: Double; var id: String { key } }
+    func routeRuns() async -> [RunChoice] {
+        let list = (await call("return window.appRouteRuns ? appRouteRuns() : []") as? [[String: Any]] ?? []).compactMap { d -> RunChoice? in
+            guard let k = d["key"] as? String else { return nil }
+            return RunChoice(key: k, date: d["date"] as? String ?? "", time: d["time"] as? String ?? "", sport: d["sport"] as? String ?? "", km: (d["km"] as? NSNumber)?.doubleValue ?? 0)
+        }
+        let store = self.store   // reading ~150 raw files: off the main thread
+        return await Task.detached { list.filter { store.getRaw($0.key)?.contains("\"route\":[[") == true } }.value
+    }
+    func runRoute(_ key: String) -> [[Double]]? {
+        guard let t = store.getRaw(key), let o = try? JSONSerialization.jsonObject(with: Data(t.utf8)) as? [String: Any] else { return nil }
+        return (o["route"] as? [[Any]])?.map { $0.map { ($0 as? NSNumber)?.doubleValue ?? .nan } }.filter { $0.count >= 3 && $0[1].isFinite && $0[2].isFinite }
+    }
+
     // MARK: training zones (kept in the analysis page; see Settings › Training zones)
     struct Zones {
         var hr: [Int] = []          // 6 limits in bpm, ascending (zone n = hr[n-1] ... hr[n])

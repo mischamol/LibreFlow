@@ -1,6 +1,7 @@
 #!/bin/zsh
 # Builds an unsigned Release LibreFlow.ipa for SideStore (or another sideloading tool that signs the app itself).
 # Output: build/LibreFlow.ipa (ignored by git). Run from anywhere: zsh tools/make_ipa.sh
+# Test build with its own version (SideStore will not reinstall the same version): LF_VERSION=1.4.90 zsh tools/make_ipa.sh
 # Uses a neutral bundle id (app.libreflow) and no team, so nothing from your Local.xcconfig ends up in the .ipa.
 set -euo pipefail
 
@@ -16,7 +17,8 @@ xcodebuild -quiet -project LibreFlow.xcodeproj -scheme LibreFlow -configuration 
   -destination 'generic/platform=iOS' -derivedDataPath build \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
   DEVELOPMENT_TEAM="" PRODUCT_BUNDLE_IDENTIFIER=app.libreflow \
-  CURRENT_PROJECT_VERSION="$(date +%Y%m%d%H%M)" build   # new build number each time, so iOS/SideStore see an update
+  CURRENT_PROJECT_VERSION="$(date +%Y%m%d%H%M)" ${LF_VERSION:+MARKETING_VERSION=$LF_VERSION} \
+  build   # new build number each time, so iOS/SideStore see an update; LF_VERSION=x.y.z for a test build
 
 APP="build/Build/Products/Release-iphoneos/LibreFlow.app"
 STAGE="build/ipa"

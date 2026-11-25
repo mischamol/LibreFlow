@@ -54,10 +54,11 @@ struct PlanToWatchView: View {
         case .reading:
             HStack { ProgressView(); Text("Connecting and reading the favorites on the watch…") }
         case .ready(let plan):
-            ForEach(plan.keep, id: \.slot) { k in Label("\(k.name) (Polar Flow, kept)", systemImage: "lock").font(.footnote).foregroundStyle(.secondary) }
-            ForEach(plan.write, id: \.slot) { w in Label("\(w.fav.name)", systemImage: "square.and.arrow.down").font(.footnote) }
+            ForEach(plan.keep, id: \.slot) { k in Label(k.name.hasSuffix("(route)") ? "\(k.name), kept" : "\(k.name) (Polar Flow, kept)", systemImage: "lock").font(.footnote).foregroundStyle(.secondary) }
+            ForEach(plan.write.filter { !$0.unchanged }, id: \.slot) { w in
+                Label(w.route ? "\(w.name) (route, moved to keep favorites without gaps)" : w.name, systemImage: w.route ? "arrow.left.arrow.right" : "square.and.arrow.down").font(.footnote) }
             if !plan.remove.isEmpty { Label("\(plan.remove.count) older LibreFlow favorite(s) removed", systemImage: "trash").font(.footnote) }
-            Button("Write \(plan.write.count) training(s) to the watch", role: .destructive) { Task { await fav.confirm() } }
+            Button("Write \(plan.sessions) training(s) to the watch", role: .destructive) { Task { await fav.confirm() } }
             Button("Cancel") { fav.cancel() }
         case .writing(let m):
             HStack { ProgressView(); Text(m) }

@@ -71,7 +71,7 @@ struct AnalysisView: View {
                 .alert("Sync with your watch", isPresented: $showHelp) {
                     Button("OK") {}
                 } message: {
-                    Text("The app connects to your watch by itself when it is already paired with this iPhone; you do not need to press anything on the watch. Not found? Press Sync on the watch. First time: put the watch in pairing mode (Settings › General settings › Pair and sync › Pair and sync phone) and accept the pairing request. Only new trainings are read; nothing on the watch is changed.")
+                    Text("The app connects to your watch by itself when it is already paired with this iPhone; you do not need to press anything on the watch. Not found? Press Sync on the watch. First time: put the watch in pairing mode (Settings › General settings › Pair and sync › Pair and sync phone) and accept the pairing request. Only new trainings are read. The watch is only changed for the routes you checked under Settings › Watch › Routes.")
                 }
         }
     }

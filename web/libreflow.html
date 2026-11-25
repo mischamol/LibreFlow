@@ -2144,6 +2144,9 @@ function planFavorites(){
   return {sessions: out, zonesAuto: zones().paceAuto};
 }
 window.appPlanFavorites = () => planFavorites();
+// Settings › Watch › Routes › From a run: the newest activities (the app checks which have a GPS route in raw/<key>.json)
+window.appRouteRuns = () => ALL.slice(-150).reverse().map(s => ({key: String(sessionKey(s)), date: ymdStr(s.date),
+  time: `${pad(s.date.getHours())}:${pad(s.date.getMinutes())}`, sport: sportLabel(s.sport), km: +s.km.toFixed(2)}));
 
 $('#planToWatch').onclick = () => APP?.postMessage({cmd: 'planToWatch'});
 if (APP) $('#planWatchCard').classList.remove('hidden');

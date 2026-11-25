@@ -27,6 +27,7 @@ Options: --debug (print raw frames), --pair (ask Windows to pair first)
 import argparse
 import asyncio
 import gzip
+import math
 import os
 import struct
 import sys
@@ -454,6 +455,214 @@ async def cmd_fav_put(args):
     await with_pftp(args, run)
 
 
+# ---------- routes (route-build / route-put) ----------
+# A route on the watch = /U/0/ROUTES/<n>/PROUTE.BPB (PbPlannedRoute, cmaion planned_route.proto) plus a route
+# favorite /U/0/FAV/<nn>/ (TST.BPB exercise_target {1: 3 ROUTE, 2: sport, 4: {}, 5: {1 route id}} + ID.BPB).
+# Verified on a Polar Flow route (25 Nov 2026): point x/y = metres east/north of the start location (sint32),
+# 3 = time offset ms, 4 = altitude offset, 6 = distance so far in metres (not in the cmaion proto).
+def zig(n):
+    return (n << 1) ^ (n >> 63)
+
+
+def pb_vi(f, n):
+    return varint(f << 3) + varint(n)
+
+
+def pb_f32(f, x):
+    return varint(f << 3 | 5) + struct.pack("<f", x)
+
+
+def pb_f64(f, x):
+    return varint(f << 3 | 1) + struct.pack("<d", x)
+
+
+def pb_datetime(dt):
+    """PbSystemDateTime {1 date {y, m, d}, 2 time {h, m, s, ms}, 3 trusted}"""
+    date = pb_vi(1, dt.year) + pb_vi(2, dt.month) + pb_vi(3, dt.day)
+    tm = pb_vi(1, dt.hour) + pb_vi(2, dt.minute) + pb_vi(3, dt.second) + pb_vi(4, dt.microsecond // 1000)
+    return pb_ld(1, date) + pb_ld(2, tm) + pb_vi(3, 1)
+
+
+def route_encode(r):
+    """r: {id, name, length, lat, lon, alt, points [(x, y, t_ms, z, dist_m)], created, modified (bytes), uuid}"""
+    out = pb_ld(1, pb_vi(1, r["id"])) + pb_ld(2, pb_ld(1, r["name"].encode()))
+    out += pb_f32(3, r["length"]) + pb_ld(4, pb_f64(1, r["lat"]) + pb_f64(2, r["lon"])) + pb_f32(5, r["alt"])
+    for x, y, t, z, d in r["points"]:
+        out += pb_ld(6, pb_vi(1, zig(x)) + pb_vi(2, zig(y)) + pb_vi(3, t) + pb_vi(4, zig(z)) + pb_vi(6, d))
+    return out + pb_vi(9, 1) + pb_ld(10, r["created"]) + pb_ld(11, r["modified"]) + pb_ld(12, r["uuid"].encode())
+
+
+def route_decode(b):
+    zz = lambda n: (n >> 1) ^ -(n & 1)
+    r = {"points": []}
+    for f, _, v in pb_split(b):
+        if f == 1: r["id"] = next(x for g, _, x in pb_split(v) if g == 1)
+        elif f == 2: r["name"] = next(x for g, _, x in pb_split(v) if g == 1).decode()
+        elif f == 3: r["length"] = struct.unpack("<f", v)[0]
+        elif f == 4:
+            loc = {g: struct.unpack("<d", x)[0] for g, _, x in pb_split(v)}
+            r["lat"], r["lon"] = loc[1], loc[2]
+        elif f == 5: r["alt"] = struct.unpack("<f", v)[0]
+        elif f == 6:
+            q = {g: x for g, _, x in pb_split(v)}
+            r["points"].append((zz(q[1]), zz(q[2]), q.get(3, 0), zz(q.get(4, 0)), q.get(6, 0)))
+        elif f == 10: r["created"] = v
+        elif f == 11: r["modified"] = v
+        elif f == 12: r["uuid"] = v.decode()
+    return r
+
+
+def gpx_points(path):
+    """[(lat, lon, ele or None, unix time or None)] from the tracks (or else the route) of a GPX file"""
+    import xml.etree.ElementTree as ET
+    from datetime import datetime
+    root = ET.parse(path).getroot()
+    ns = root.tag[:root.tag.index("}") + 1] if root.tag.startswith("{") else ""
+    pts = root.findall(f".//{ns}trkpt")
+    if not pts:
+        pts = root.findall(f".//{ns}rtept")
+    out = []
+    for p in pts:
+        ele, tm = p.find(f"{ns}ele"), p.find(f"{ns}time")
+        t = None
+        if tm is not None and tm.text:
+            try: t = datetime.fromisoformat(tm.text.strip().replace("Z", "+00:00")).timestamp()
+            except ValueError: t = None
+        out.append((float(p.get("lat")), float(p.get("lon")), float(ele.text) if ele is not None and ele.text else None, t))
+    names = [e for e in (root.find(f".//{ns}trk/{ns}name"), root.find(f".//{ns}rte/{ns}name"),
+                         root.find(f".//{ns}metadata/{ns}name")) if e is not None and e.text and e.text.strip()]
+    return out, (names[0].text.strip() if names else None)   # (an Element without children is falsy: no `or`)
+
+
+def simplify(xy, tol):
+    """Douglas–Peucker on metre coordinates; returns kept indices"""
+    keep, stack = {0, len(xy) - 1}, [(0, len(xy) - 1)]
+    while stack:
+        a, b = stack.pop()
+        (x1, y1), (x2, y2) = xy[a], xy[b]
+        dx, dy = x2 - x1, y2 - y1
+        L = math.hypot(dx, dy)
+        best, bi = 0, None
+        for i in range(a + 1, b):
+            x, y = xy[i]
+            d = abs(dy * (x - x1) - dx * (y - y1)) / L if L else math.hypot(x - x1, y - y1)
+            if d > best: best, bi = d, i
+        if bi is not None and best > tol:
+            keep.add(bi); stack += [(a, bi), (bi, b)]
+    return sorted(keep)
+
+
+MAX_ROUTE_POINTS = 500   # a Polar Flow route of 15 km had 466 points (8 kB); stay in that range until tested further
+
+
+def route_from_gpx(path, name=None, rid=None):
+    from datetime import datetime
+    import uuid as _uuid
+    pts, gname = gpx_points(path)
+    pts = [p for i, p in enumerate(pts) if i == 0 or (p[0], p[1]) != (pts[i - 1][0], pts[i - 1][1])]
+    if len(pts) < 2:
+        sys.exit(f"{path}: no track or route points")
+    lat0, lon0 = pts[0][0], pts[0][1]
+    k = 111320 * math.cos(math.radians(lat0))
+    xy = [((lon - lon0) * k, (lat - lat0) * 111320) for lat, lon, _, _ in pts]
+    cum = [0.0]
+    for i in range(1, len(xy)):
+        cum.append(cum[-1] + math.hypot(xy[i][0] - xy[i - 1][0], xy[i][1] - xy[i - 1][1]))
+    tol = 2.0
+    idx = simplify(xy, tol)
+    while len(idx) > MAX_ROUTE_POINTS:
+        tol *= 1.3; idx = simplify(xy, tol)
+    times = [p[3] for p in pts]
+    has_t = all(t is not None for t in times) and times[-1] > times[0]
+    ele0 = pts[0][2]
+    # length and distance-so-far along the stored (rounded) points: the watch measures the route that way (a GPX
+    # recording is a bit longer because of GPS zigzag that the simplification removes; test 25 Nov 2026: 14.83 vs 14.71)
+    rnd = lambda v: int(math.copysign(math.floor(abs(v) + 0.5), v))   # halves away from zero, as the app (Swift)
+    points, d, prev = [], 0.0, None
+    for i in idx:
+        x, y = rnd(xy[i][0]), rnd(xy[i][1])
+        if prev: d += math.hypot(x - prev[0], y - prev[1])
+        prev = (x, y)
+        t = rnd(times[i] - times[0]) * 1000 if has_t else rnd(d / 3.0) * 1000   # no times: 3 m/s
+        z = rnd(pts[i][2] - ele0) if ele0 is not None and pts[i][2] is not None else 0
+        points.append((x, y, t, z, rnd(d)))
+    now = pb_datetime(datetime.now())
+    rid = rid or 900000000 + int(datetime.now().timestamp()) % 100000000
+    nm = (name or gname or os.path.splitext(os.path.basename(path))[0])[:45]
+    return {"id": rid, "name": nm, "length": d, "gpx_length": cum[-1], "lat": lat0, "lon": lon0, "alt": float(ele0 or 0),
+            "points": points, "created": now, "modified": now, "uuid": str(_uuid.uuid4()), "tol": tol, "gpx_n": len(pts)}
+
+
+def route_favorite(r, sport=1):
+    from datetime import datetime
+    tst = pb_ld(2, pb_ld(1, r["name"].encode())) + pb_ld(6, pb_vi(1, 3) + pb_ld(2, pb_vi(1, sport)) + pb_ld(4, b"") + pb_ld(5, pb_vi(1, r["id"])))
+    now = datetime.now()
+    dt = pb_ld(1, pb_vi(1, now.year) + pb_vi(2, now.month) + pb_vi(3, now.day)) + \
+         pb_ld(2, pb_vi(1, now.hour) + pb_vi(2, now.minute) + pb_vi(3, now.second) + pb_vi(4, 0)) + pb_vi(3, 0)
+    return tst, pb_vi(1, r["id"]) + pb_ld(2, dt) + pb_ld(3, dt)
+
+
+def cmd_route_build(args):
+    """Offline: GPX -> <outdir>/PROUTE.BPB + TST.BPB + ID.BPB, nothing is sent to the watch."""
+    if args.check:   # re-encode a route read from the watch and compare byte for byte
+        b = open(args.gpx, "rb").read()
+        r = route_decode(b)
+        same = route_encode(r) == b
+        print(f"{r['name']}: {len(r['points'])} points, {r['length']:.0f} m, re-encoded {'IDENTICAL' if same else 'DIFFERENT'}")
+        return
+    r = route_from_gpx(args.gpx, args.name)
+    os.makedirs(args.outdir, exist_ok=True)
+    tst, idb = route_favorite(r, args.sport)
+    for n, data in (("PROUTE.BPB", route_encode(r)), ("TST.BPB", tst), ("ID.BPB", idb)):
+        with open(os.path.join(args.outdir, n), "wb") as f:
+            f.write(data)
+    xs, ys = [p[0] for p in r["points"]], [p[1] for p in r["points"]]
+    print(f"{r['name']}: {r['length'] / 1000:.2f} km (GPX {r['gpx_length'] / 1000:.2f} km), {r['gpx_n']} GPX points -> {len(r['points'])} "
+          f"(within {r['tol']:.1f} m), {max(xs) - min(xs):.0f} × {max(ys) - min(ys):.0f} m, route id {r['id']}")
+    print(f"Written to {args.outdir}/ (PROUTE.BPB, TST.BPB, ID.BPB). Nothing was sent to the watch.")
+
+
+async def cmd_route_put(args):
+    """Write ONE route built by route-build: new folder /U/0/ROUTES/<n>/ (PROUTE.BPB) and a route favorite in the
+    next free /U/0/FAV/<nn>/ (TST.BPB + ID.BPB). Refuses existing folders and asks you to type WRITE first."""
+    files = {}
+    for n in ("PROUTE.BPB", "TST.BPB", "ID.BPB"):
+        fp = os.path.join(args.dir, n)
+        if not os.path.isfile(fp):
+            sys.exit(f"missing {fp} (make it with route-build)")
+        files[n] = open(fp, "rb").read()
+    r = route_decode(files["PROUTE.BPB"])
+    if r["id"] < 900000000 or not 0 < len(files["PROUTE.BPB"]) <= 16384:
+        sys.exit("not a LibreFlow route (id < 900000000) or unexpected size")
+
+    async def run(p):
+        routes = [n.rstrip("/") for n, _ in await p.ls("/U/0/ROUTES/")]
+        favs = [n.rstrip("/") for n, _ in await p.ls("/U/0/FAV/") if n.endswith("/")]
+        print("/U/0/ROUTES/ now:", " ".join(routes) or "(empty)", "  /U/0/FAV/ now:", " ".join(favs) or "(empty)")
+        rslot = str(max([int(x) for x in routes if x.isdigit()], default=-1) + 1)
+        fslot = f"{len(favs):02d}"
+        if fslot in favs or rslot in routes:
+            print("Target folder already exists: nothing written.")
+            return
+        rf, ff = f"/U/0/ROUTES/{rslot}/", f"/U/0/FAV/{fslot}/"
+        print(f"About to WRITE route \"{r['name']}\" ({r['length'] / 1000:.2f} km, {len(r['points'])} points) to the watch:")
+        print(f"  create {rf}PROUTE.BPB ({len(files['PROUTE.BPB'])} bytes)")
+        print(f"  create {ff}TST.BPB ({len(files['TST.BPB'])} bytes) and {ff}ID.BPB ({len(files['ID.BPB'])} bytes)")
+        if input("Type WRITE to continue: ").strip() != "WRITE":
+            print("Cancelled: nothing written.")
+            return
+        await p.put(rf)
+        await p.put(rf + "PROUTE.BPB", files["PROUTE.BPB"])
+        print(f"  written {rf}PROUTE.BPB")
+        await p.put(ff)
+        for n in ("TST.BPB", "ID.BPB"):
+            await p.put(ff + n, files[n])
+            print(f"  written {ff}{n}")
+        back = await p.get(rf + "PROUTE.BPB")
+        print("Read back:", "identical" if back == files["PROUTE.BPB"] else "DIFFERENT")
+    await with_pftp(args, run)
+
+
 # ---------- sport profile zones (zones-put) ----------
 def pb_split(b):
     """[(field, raw bytes of the whole field, value or payload)] in original order (varint / length / fixed only)"""
@@ -616,6 +825,117 @@ async def cmd_fav_rm(args):
             print(f"  folder itself not removed ({e})")
         print("/U/0/FAV/ now:", " ".join(sorted(n for n, _ in await p.ls("/U/0/FAV/"))))
     await with_pftp(args, run)
+
+
+async def cmd_route_rm(args):
+    """Without a folder number: list the routes and their favorites (read-only). With one: REMOVE that route (only
+    when LibreFlow wrote it, id >= 900000000) and its route favorite. FAV and ROUTES must both stay without gaps (the
+    watch stops at the first gap; test 25 Nov 2026: after removing ROUTES/1, route 2 and its favorite disappeared):
+    the last folder moves into the freed place unchanged (only when LibreFlow wrote it). --fix-gaps only closes gaps."""
+    async def run(p):
+        routes = sorted(int(n.rstrip("/")) for n, _ in await p.ls("/U/0/ROUTES/") if n.rstrip("/").isdigit())
+        info = {}
+        for n in routes:
+            r = route_decode(await p.get(f"/U/0/ROUTES/{n}/PROUTE.BPB"))
+            info[n] = (r["id"], r["name"], r["length"])
+        favs = sorted(int(n.rstrip("/")) for n, _ in await p.ls("/U/0/FAV/") if n.rstrip("/").isdigit())
+        fav = {}
+        for k in favs:
+            d = f"/U/0/FAV/{k:02d}/"
+            idb, tst = await p.get(d + "ID.BPB"), await p.get(d + "TST.BPB")
+            fid = next((v for f, _, v in pb_split(idb) if f == 1), 0)
+            tgt = next((v for f, _, v in pb_split(tst) if f == 6), b"")
+            ttype = next((v for f, _, v in pb_split(tgt) if f == 1), 0) if tgt else 0
+            rid = next((next((x for g, _, x in pb_split(v) if g == 1), 0) for f, _, v in pb_split(tgt) if f == 5), 0) if tgt else 0
+            fav[k] = (fid, ttype, rid, idb, tst)
+        print("Routes:")
+        for n in routes:
+            rid, name, length = info[n]
+            ks = [f"{k:02d}" for k in favs if fav[k][1] == 3 and fav[k][2] == rid]
+            print(f"  {n}: \"{name}\" {length / 1000:.2f} km, id {rid} ({'LibreFlow' if rid >= LIBREFLOW_FAV_ID else 'Polar Flow'}), favorite {' '.join(ks) or '-'}")
+        print("Favorites:", " ".join(f"{k:02d}" for k in favs), " (gapless)" if favs == list(range(len(favs))) else " (HAS A GAP)")
+        print("Route folders:", " ".join(map(str, routes)), " (gapless)" if routes == list(range(len(routes))) else " (HAS A GAP)")
+        if args.fix_gaps:
+            steps, rs = [], list(routes)
+            while rs != list(range(len(rs))):
+                hole, top = next(i for i in range(len(rs)) if i not in rs), rs[-1]
+                if info[top][0] < LIBREFLOW_FAV_ID:
+                    print(f"Route folder {top} is from Polar Flow: it is not moved. Sync with Polar Flow to repair."); return
+                steps.append((f"move route {top} (\"{info[top][1]}\") into folder {hole} (same file)", ("rmove", hole, top)))
+                rs.remove(top); rs.append(hole); rs.sort()
+            if not steps:
+                print("No gaps: nothing to do."); return
+            print("About to change the watch:")
+            for desc, _ in steps:
+                print("  " + desc)
+            if input("Type WRITE to continue: ").strip() != "WRITE":
+                print("Cancelled: nothing changed."); return
+            await route_steps(p, steps)
+            return
+        if args.folder is None:
+            return
+        n = int(args.folder)
+        if n not in info:
+            print(f"/U/0/ROUTES/{n}/ does not exist: nothing removed."); return
+        rid, name, _ = info[n]
+        if rid < LIBREFLOW_FAV_ID:
+            print(f"Route {n} was not written by LibreFlow (id {rid}): nothing removed."); return
+        ks = [k for k in favs if fav[k][1] == 3 and fav[k][2] == rid]
+        last = favs[-1] if favs else None
+        steps = []   # (description, coroutine factory)
+        for k in sorted(ks, reverse=True):
+            d = f"/U/0/FAV/{k:02d}/"
+            if k != last:
+                src = f"/U/0/FAV/{last:02d}/"
+                if fav[last][0] < LIBREFLOW_FAV_ID:
+                    print(f"Favorite {k:02d} is not the last one and the last one ({last:02d}) is from Polar Flow: removing "
+                          "it would leave a gap. Nothing removed."); return
+                steps.append((f"move favorite {last:02d} into {k:02d} (same files)", ("move", d, src, fav[last])))
+                steps.append((f"remove {src}", ("rmdir", src)))
+                fav[k] = fav[last]; favs.remove(last); last = favs[-1] if favs else None
+            else:
+                steps.append((f"remove {d} (route favorite)", ("rmdir", d)))
+                favs.remove(k); last = favs[-1] if favs else None
+        top = routes[-1]
+        if top != n:
+            if info[top][0] < LIBREFLOW_FAV_ID:
+                print(f"Route {n} is not the last folder and the last one ({top}) is from Polar Flow: removing it would leave a "
+                      "gap. Nothing removed."); return
+            steps.append((f"move route {top} (\"{info[top][1]}\") into folder {n} (same file)", ("rmove", n, top)))
+        else:
+            steps.append((f"remove /U/0/ROUTES/{n}/ (\"{name}\")", ("rmdir", f"/U/0/ROUTES/{n}/")))
+        print("About to change the watch:")
+        for desc, _ in steps:
+            print("  " + desc)
+        if input("Type REMOVE to continue: ").strip() != "REMOVE":
+            print("Cancelled: nothing changed."); return
+        await route_steps(p, steps)
+    await with_pftp(args, run)
+
+
+async def route_steps(p, steps):
+    for desc, st in steps:
+        if st[0] == "move":
+            _, d, src, (fid, _, _, idb, tst) = st
+            await p.put(d + "TST.BPB", tst); await p.put(d + "ID.BPB", idb)
+        elif st[0] == "rmove":   # route folder `top` -> `hole`: same file into the (new) folder, then the old one away
+            _, hole, top = st
+            data = await p.get(f"/U/0/ROUTES/{top}/PROUTE.BPB")
+            if f"{hole}/" not in [x for x, _ in await p.ls("/U/0/ROUTES/")]:
+                await p.put(f"/U/0/ROUTES/{hole}/")
+            await p.put(f"/U/0/ROUTES/{hole}/PROUTE.BPB", data)
+            if await p.get(f"/U/0/ROUTES/{hole}/PROUTE.BPB") != data:
+                print("  read-back differs: stopped before removing the old folder"); return
+            await p.remove(f"/U/0/ROUTES/{top}/PROUTE.BPB"); await p.remove(f"/U/0/ROUTES/{top}/")
+        else:
+            d = st[1]
+            for f, _ in await p.ls(d):
+                if not f.endswith("/"):
+                    await p.remove(d + f)
+            await p.remove(d)
+        print("  done: " + desc)
+    print("/U/0/ROUTES/ now:", " ".join(sorted(n for n, _ in await p.ls("/U/0/ROUTES/"))),
+          "  /U/0/FAV/ now:", " ".join(sorted(n for n, _ in await p.ls("/U/0/FAV/"))))
 
 
 async def cmd_pull(args):
@@ -962,6 +1282,15 @@ def main():
     s.add_argument("--restore", action="store_true", help="write the backup file back unchanged")
     s = sub.add_parser("fav-put", help="WRITE one training favorite to /U/0/FAV/<nn>/ (asks first)")
     s.add_argument("address"); s.add_argument("dir"); s.add_argument("slot")
+    s = sub.add_parser("route-build", help="GPX -> route files for route-put (offline)")
+    s.add_argument("gpx"); s.add_argument("outdir", nargs="?", default="route_out")
+    s.add_argument("--name"); s.add_argument("--sport", type=int, default=1, help="sport id (1 running)")
+    s.add_argument("--check", action="store_true", help="re-encode a PROUTE.BPB from the watch and compare")
+    s = sub.add_parser("route-put", help="WRITE one route + its route favorite (asks first)")
+    s.add_argument("address"); s.add_argument("dir")
+    s = sub.add_parser("route-rm", help="list routes; with a folder number REMOVE that LibreFlow route (asks first)")
+    s.add_argument("address"); s.add_argument("folder", nargs="?")
+    s.add_argument("--fix-gaps", action="store_true", help="only close gaps in /U/0/ROUTES/ (moves LibreFlow routes, asks first)")
     s = sub.add_parser("training"); s.add_argument("dir")
     s = sub.add_parser("explore"); s.add_argument("address"); s.add_argument("outdir", nargs="?", default="horloge_dump")
     s = sub.add_parser("all", aliases=["alles"], help="download every training (resumable)")
@@ -980,6 +1309,8 @@ def main():
         return cmd_export(args)
     if args.cmd == "training":
         return cmd_training(args)
+    if args.cmd == "route-build":
+        return cmd_route_build(args)
     from bleak import BleakScanner as _S, BleakClient as _C
     BleakScanner, BleakClient = _S, _C
     try:

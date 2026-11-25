@@ -63,6 +63,10 @@ That is why LibreFlow keeps **all data local**:
 - **Running Plan › Send to watch…**: the next 7 days of the plan as favorites on the watch, with distance goals,
   heart-rate zones for easy running and your pace zones for the fast parts. Earlier LibreFlow favorites are replaced;
   favorites from Polar Flow are never changed.
+- **Settings › Watch › Routes**: your routes on the phone – GPX files (from Komoot, Strava or another app) and routes
+  made from your own runs – each with a check mark. The next **Sync** puts the checked ones on the watch (as a route
+  with its own favorite) and removes the unchecked ones that LibreFlow put there. Polar Flow's routes are only listed
+  and never changed. No route editor.
 - **Settings › Privacy**: include heart rate (**off** by default) and the GPS route (on) in exports and uploads;
   *Show map* (on): routes on OpenStreetMap – the only internet access the analysis has; off = route drawn without
   a map.
@@ -149,7 +153,8 @@ Two ways to get a run on Strava:
   `FB005C53` (notifications to the watch).
 - Pairing is required (otherwise "Insufficient Authentication").
 - Sync session as in the Polar BLE SDK: `INITIALIZE_SESSION (8)`, `START_SYNC (0)` … `STOP_SYNC (1, completed=true)`,
-  `TERMINATE_SESSION (9)` on `FB005C53`. Nothing on the watch is written or deleted.
+  `TERMINATE_SESSION (9)` on `FB005C53`. Reading trainings changes nothing on the watch; it is only written to for
+  what you choose: zones and plan favorites (after a confirmation) and the routes you checked (at Sync).
 - Trainings: `/U/0/<YYYYMMDD>/E/<HHMMSS>/` with `TSESS.BPB`, `00/BASE.BPB`, `00/STATS.BPB`, `00/SAMPLES.GZB`
   (1 s series), `00/ROUTE.GZB` (GPS). Decoding verified against the watch's own summary.
 - Sources: [Polar BLE SDK](https://github.com/polarofficial/polar-ble-sdk) and the file formats in
