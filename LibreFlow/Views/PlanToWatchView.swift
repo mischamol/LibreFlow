@@ -24,7 +24,7 @@ struct PlanToWatchView: View {
                         }
                     }
                 } header: { Text("Next 7 days") } footer: {
-                    Text("Pace phases use your pace zones (Settings › Training zones): send those to the watch too, so the zone numbers mean the same there.")
+                    Text("Fast parts use your pace zones (Settings › Training zones): send those to the watch too, so zone numbers mean the same there.")
                 }
                 Section { content } header: { Text("Watch") }
             }

@@ -29,6 +29,31 @@ enum PB {
         return out
     }
 
+    // MARK: writing (fields in the order given; used for the files LibreFlow writes to the watch)
+    static func key(_ f: Int, _ wire: Int) -> [UInt8] { varint(UInt64(f << 3 | wire)) }
+    static func vi(_ f: Int, _ v: UInt64) -> [UInt8] { key(f, 0) + varint(v) }
+    static func vi(_ f: Int, _ v: Int) -> [UInt8] { vi(f, UInt64(max(0, v))) }
+    /// sint32/sint64 (zigzag)
+    static func zig(_ f: Int, _ v: Int) -> [UInt8] { vi(f, UInt64(bitPattern: Int64((v << 1) ^ (v >> 63)))) }
+    static func ld(_ f: Int, _ b: [UInt8]) -> [UInt8] { key(f, 2) + varint(UInt64(b.count)) + b }
+    /// a Polar text message {1 text} as field f
+    static func text(_ f: Int, _ s: String) -> [UInt8] { ld(f, ld(1, Array(s.utf8))) }
+    static func f32(_ f: Int, _ x: Double) -> [UInt8] { key(f, 5) + withUnsafeBytes(of: Float(x).bitPattern.littleEndian, Array.init) }
+    static func f64(_ f: Int, _ x: Double) -> [UInt8] { key(f, 1) + withUnsafeBytes(of: x.bitPattern.littleEndian, Array.init) }
+
+    /// PbSystemDateTime {1 date {y, m, d}, 2 time {h, m, s, ms}, 3 trusted}; ms only when trusted (as Polar writes it)
+    static func dateTime(_ now: Date, trusted: Bool) -> [UInt8] {
+        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second, .nanosecond], from: now)
+        return ld(1, vi(1, c.year!) + vi(2, c.month!) + vi(3, c.day!))
+            + ld(2, vi(1, c.hour!) + vi(2, c.minute!) + vi(3, c.second!) + vi(4, trusted ? c.nanosecond! / 1_000_000 : 0)) + vi(3, trusted ? 1 : 0)
+    }
+
+    /// ID.BPB of a favorite: {1 id, 2 last modified, 3 created}
+    static func favoriteIdFile(_ id: UInt64, now: Date = Date()) -> [UInt8] {
+        let dt = dateTime(now, trusted: false)
+        return vi(1, id) + ld(2, dt) + ld(3, dt)
+    }
+
     static func readVarint(_ buf: [UInt8], _ i: inout Int) throws -> UInt64 {
         var shift: UInt64 = 0, val: UInt64 = 0
         while true {

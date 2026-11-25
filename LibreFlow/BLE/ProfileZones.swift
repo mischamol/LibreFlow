@@ -30,7 +30,6 @@ struct ProfileZones: Equatable {
         }
         return out
     }
-    private static func ld(_ f: Int, _ payload: [UInt8]) -> [UInt8] { PB.varint(UInt64(f << 3 | 2)) + PB.varint(UInt64(payload.count)) + payload }
     private static func f32(_ x: Float) -> [UInt8] { withUnsafeBytes(of: x.bitPattern.littleEndian, Array.init) }
 
     /// Sport id of the profile (1 = running).
@@ -52,9 +51,9 @@ struct ProfileZones: Equatable {
             var out: [UInt8] = [], putHr = false, putSp = false
             for f in try Self.split(zl) {
                 if f.number == 1 {
-                    if !putHr { for z in hr { out += Self.ld(1, [0x08] + PB.varint(UInt64(z.lowerBound)) + [0x10] + PB.varint(UInt64(z.upperBound))) }; putHr = true }
+                    if !putHr { for z in hr { out += PB.ld(1, [0x08] + PB.varint(UInt64(z.lowerBound)) + [0x10] + PB.varint(UInt64(z.upperBound))) }; putHr = true }
                 } else if f.number == 2 {
-                    if !putSp { for z in speed { out += Self.ld(2, [0x0D] + Self.f32(z.lowerBound) + [0x15] + Self.f32(z.upperBound)) }; putSp = true }
+                    if !putSp { for z in speed { out += PB.ld(2, [0x0D] + Self.f32(z.lowerBound) + [0x15] + Self.f32(z.upperBound)) }; putSp = true }
                 } else { out += f.raw }
             }
             guard putHr, putSp else { throw PBError.truncated }
@@ -64,7 +63,7 @@ struct ProfileZones: Equatable {
             var found = false
             let out = try Self.split(st).flatMap { f -> [UInt8] in
                 guard f.number == 6, let pl = f.payload else { return f.raw }
-                found = true; return Self.ld(6, try zoneLimits(pl))
+                found = true; return PB.ld(6, try zoneLimits(pl))
             }
             guard found else { throw PBError.truncated }
             return out
@@ -72,7 +71,7 @@ struct ProfileZones: Equatable {
         var found = false
         let out = try Self.split(b).flatMap { f -> [UInt8] in
             guard f.number == 3, let pl = f.payload else { return f.raw }
-            found = true; return Self.ld(3, try settings(pl))
+            found = true; return PB.ld(3, try settings(pl))
         }
         guard found else { throw PBError.truncated }
         return out

@@ -106,10 +106,10 @@ are in `CLAUDE.local.md`, which is not in git.
   phased favorites (distance goals, HR zones for easy parts, pace zones for fast parts; encoder byte-identical to the
   favorite verified on the watch); one confirmation, one session; LibreFlow favorites (id ≥ 900000000) are replaced
   or removed and renumbered so FAV stays gapless; Flow favorites are never touched.
-  Settings › Watch › Routes (`RoutesView`, `BLE/WatchRoutes.swift`): a route library on the phone
+  Settings › Routes (`RoutesView`, `BLE/WatchRoutes.swift`): a route library on the phone
   (`RouteLibrary`, Documents/routes/library.json: `PlannedRoute` + checked + onWatch + source) with GPX imports
   (track, else route) and routes from own runs (page `appRouteRuns()`, raw/<key>.json route), each simplified to ≤ 500
-  points; a check mark per route, rename, delete; Sync/Cancel button on the page too. The normal Sync (`WatchSync`)
+  points; a check mark per route, rename, delete. The normal Sync (`WatchSync`)
   ends with `RouteSync.reconcile`: checked routes are added at the end of ROUTES and FAV, unchecked/deleted LibreFlow
   routes are removed (the last folder/favorite moves into the gap unchanged, both lists stay gapless; nothing is
   changed when a Polar Flow item would have to move), renamed ones are rewritten in place; LibreFlow routes on the
@@ -120,7 +120,15 @@ are in `CLAUDE.local.md`, which is not in git.
   gapless; never removed. DEBUG hook: env `LIBREFLOW_TEST_GPX` (via `SIMCTL_CHILD_`) imports a GPX, as the
   simulator's file picker cannot be driven. SideStore will not reinstall the same version: test IPAs with
   `LF_VERSION=1.4.90 zsh tools/make_ipa.sh`.
-  Sync Cancel: `PolarWatch.disconnect()` ends pending waits; the button resets at once.
+  Sync Cancel: `PolarWatch.disconnect()` ends pending waits; the button resets at once. The Sync/Cancel button,
+  progress/result bar, log sheet and first-sync help are one modifier, `.syncControls()` (`Views/SyncControls.swift`),
+  on every screen (tabs with `logButton: true`, plus Settings, Routes, Training zones).
+  App Settings order (by how often used): Training (Routes, Training zones), Shoes, Heart rate, Privacy, Strava,
+  Your data (backup, import, CSV, demo), Reset (forget watch, delete), About. The web Settings view: Shoes, Training
+  zones, Heart rate, Map, Your data (`#loader`, moved to the top while there is no data). Shared code: protobuf writing
+  in `PB` (`vi/zig/ld/text/f32/f64/dateTime/favoriteIdFile`, Training/Protobuf.swift), watch folders in
+  `PolarWatch.favDir/routeDir/gapless/folderNumbers/removeFolder`, dates in `DayText`; Python `pb_datetime`,
+  `pftp_rmdir`. Delete all data also clears the route library.
   Plan: goal {dist 5k/10k/10mi/half/marathon/custom (+km), date, optional time, days/week, long-run day} in `PLAN` (store + backups).
   `buildPlan()` recomputes everything from the actual running on every refresh (volume from the 4-week average,
   +≤10%/week, lighter week every 4th week anchored to `PLAN.created`, long run ≤ +10% of the longest in 30 days,

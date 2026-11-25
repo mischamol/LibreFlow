@@ -48,19 +48,14 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
 
     /// Settings that live in the analysis page (read/written through window.appSettings / appSetSettings).
     struct PageSettings {
-        struct Sport: Identifiable, Hashable { let id: String; let name: String; let count: Int; var on: Bool }
         var count = 0, isDemo = false, hrMaxFromProfile = false
         var hrMax = 0, hrRest = 0, aet = 0, ant = 0
-        var sports: [Sport] = []
         init() {}
         init(_ d: [String: Any]) {
             count = d["count"] as? Int ?? 0; isDemo = d["isDemo"] as? Bool ?? false
             hrMaxFromProfile = d["hrMaxFromProfile"] as? Bool ?? false
             hrMax = (d["hrMax"] as? NSNumber)?.intValue ?? 0; hrRest = (d["hrRest"] as? NSNumber)?.intValue ?? 0
             aet = (d["aet"] as? NSNumber)?.intValue ?? 0; ant = (d["ant"] as? NSNumber)?.intValue ?? 0
-            sports = (d["sports"] as? [[String: Any]] ?? []).map {
-                Sport(id: $0["id"] as? String ?? "", name: $0["name"] as? String ?? "", count: ($0["count"] as? NSNumber)?.intValue ?? 0, on: $0["on"] as? Bool ?? false)
-            }
         }
     }
 
@@ -214,7 +209,7 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         return ((d["sessions"] as? [[String: Any]] ?? []).compactMap(PlanFavorite.init), nil)
     }
 
-    /// Settings › Watch › Routes › From a run: newest activities that have a GPS route in the raw data.
+    /// Settings › Routes › From a run: newest activities that have a GPS route in the raw data.
     struct RunChoice: Identifiable { var key: String, date: String, time: String, sport: String, km: Double; var id: String { key } }
     func routeRuns() async -> [RunChoice] {
         let list = (await call("return window.appRouteRuns ? appRouteRuns() : []") as? [[String: Any]] ?? []).compactMap { d -> RunChoice? in
@@ -256,10 +251,10 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         return (await call("return appSetZones(o)", ["o": o]) as? [String: Any]).map(Zones.init)
     }
 
-    func applySettings(hrMax: Int? = nil, hrRest: Int? = nil, aet: Int? = nil, ant: Int? = nil, sports: [String]? = nil) async {
+    func applySettings(hrMax: Int? = nil, hrRest: Int? = nil, aet: Int? = nil, ant: Int? = nil) async {
         var o: [String: Any] = [:]
         if let hrMax { o["hrMax"] = hrMax }; if let hrRest { o["hrRest"] = hrRest }
-        if let aet { o["aet"] = aet }; if let ant { o["ant"] = ant }; if let sports { o["sports"] = sports }
+        if let aet { o["aet"] = aet }; if let ant { o["ant"] = ant }
         if let d = await call("return appSetSettings(o)", ["o": o]) as? [String: Any] { settings = PageSettings(d) }
     }
     private func takeShoes(_ any: Any?) {
@@ -294,6 +289,7 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
 
     func deleteAllData() {
         store.deleteAll()
+        RouteLibrary.shared.reset()
         webView.evaluateJavaScript("localStorage.clear(); 0")
         pageReady = false
         let fresh = makeWebView()

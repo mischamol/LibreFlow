@@ -3,7 +3,7 @@ import UIKit
 
 /// Downloads every new training (/U/0/<date>/E/<time>/) from the watch, resumable, like `polar_ble.py --sync all`
 /// (reading only), then makes the LibreFlow routes on the watch match the checked routes (`RouteSync`: the only
-/// writes, chosen by the user in Settings › Watch › Routes). Afterwards each new training is decoded for the analysis page.
+/// writes, chosen by the user in Settings › Routes). Afterwards each new training is decoded for the analysis page.
 @MainActor
 final class WatchSync: ObservableObject {
     @Published var running = false
@@ -91,7 +91,7 @@ final class WatchSync: ObservableObject {
                 }
             }
             store.saveCheckedDays(checked)
-            // routes: make the LibreFlow routes on the watch match the checked ones (Settings › Watch › Routes)
+            // routes: make the LibreFlow routes on the watch match the checked ones (Settings › Routes)
             try Task.checkCancellation()
             do { try await RouteSync.reconcile(w) { self.log($0) } }
             catch is CancellationError { throw CancellationError() }
@@ -139,10 +139,15 @@ final class WatchSync: ObservableObject {
         return f.string(from: d)
     }
     /// "20250105_081500" -> "5 Jan 2025 08:15"
-    static func pretty(_ id: String) -> String {
-        let f = DateFormatter(); f.dateFormat = "yyyyMMdd_HHmmss"; f.locale = Locale(identifier: "en_US_POSIX")
-        guard let d = f.date(from: id) else { return id }
-        let o = DateFormatter(); o.locale = Locale(identifier: "en_GB"); o.dateFormat = "d MMM yyyy HH:mm"
+    static func pretty(_ id: String) -> String { DayText.convert(id, from: "yyyyMMdd_HHmmss", to: "d MMM yyyy HH:mm") }
+}
+
+/// Dates as shown in the app (English, like the analysis page): "5 Jan 2025".
+enum DayText {
+    static func convert(_ s: String, from: String, to: String = "d MMM yyyy") -> String {
+        let f = DateFormatter(); f.dateFormat = from; f.locale = Locale(identifier: "en_US_POSIX")
+        guard let d = f.date(from: s) else { return s }
+        let o = DateFormatter(); o.locale = Locale(identifier: "en_GB"); o.dateFormat = to
         return o.string(from: d)
     }
 }

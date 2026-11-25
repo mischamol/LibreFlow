@@ -1,34 +1,22 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Settings › Watch › Routes: every route kept on this iPhone (GPX imports and routes made from own runs), each with a
+/// Settings › Routes: every route kept on this iPhone (GPX imports and routes made from own runs), each with a
 /// check mark. The next Sync puts the checked ones on the watch and removes unchecked LibreFlow routes from it.
 /// Polar Flow's routes are only listed. No route editing besides the name.
 struct RoutesView: View {
     @EnvironmentObject var model: AppModel
-    @EnvironmentObject var sync: WatchSync
     @ObservedObject private var lib = RouteLibrary.shared
     @State private var importing = false
     @State private var pickingRun = false
     @State private var error: String?
     @State private var renaming: RouteLibrary.Entry?
     @State private var newName = ""
-    @State private var showLog = false
 
     private static let gpx: [UTType] = [UTType(filenameExtension: "gpx"), .xml].compactMap { $0 }
 
     var body: some View {
         List {
-            if sync.running {
-                Section {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ProgressView(value: sync.progress)
-                        Text(sync.lines.last ?? "Syncing…").font(.footnote).foregroundStyle(.secondary).lineLimit(2)
-                    }
-                }
-            } else if let r = sync.lastResult {
-                Section { HStack { Text(r).font(.footnote); Spacer(); Button("Log") { showLog = true }.font(.footnote) } }
-            }
             Section {
                 if lib.entries.isEmpty {
                     Text("No routes yet. Tap + to import a GPX file or to use one of your runs.").foregroundStyle(.secondary)
@@ -45,14 +33,8 @@ struct RoutesView: View {
             }
         }
         .navigationTitle("Routes")
+        .syncControls()
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                if sync.running {
-                    Button("Cancel", role: .destructive) { sync.cancel() }
-                } else {
-                    Button { sync.start() } label: { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
-                }
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button { importing = true } label: { Label("Import GPX file…", systemImage: "doc.badge.plus") }
@@ -62,7 +44,6 @@ struct RoutesView: View {
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: Self.gpx, allowsMultipleSelection: true) { r in load(r) }
         .sheet(isPresented: $pickingRun) { RunRoutePicker().environmentObject(model) }
-        .sheet(isPresented: $showLog) { SyncLogView().environmentObject(sync).environmentObject(model) }
         .alert("Rename route", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $newName)
             Button("Save") { if let e = renaming { lib.rename(e.id, newName) }; renaming = nil }
@@ -158,12 +139,7 @@ struct RunRoutePicker: View {
     }
 
     /// "2026-11-12" -> "12 Nov 2026"
-    static func pretty(_ ymd: String) -> String {
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX")
-        guard let d = f.date(from: ymd) else { return ymd }
-        let o = DateFormatter(); o.locale = Locale(identifier: "en_GB"); o.dateFormat = "d MMM yyyy"
-        return o.string(from: d)
-    }
+    static func pretty(_ ymd: String) -> String { DayText.convert(ymd, from: "yyyy-MM-dd") }
 }
 
 /// The route's metre coordinates scaled into the available rectangle (north up); a small circle marks the start.

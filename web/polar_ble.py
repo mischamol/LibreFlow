@@ -476,11 +476,11 @@ def pb_f64(f, x):
     return varint(f << 3 | 1) + struct.pack("<d", x)
 
 
-def pb_datetime(dt):
-    """PbSystemDateTime {1 date {y, m, d}, 2 time {h, m, s, ms}, 3 trusted}"""
+def pb_datetime(dt, trusted=True):
+    """PbSystemDateTime {1 date {y, m, d}, 2 time {h, m, s, ms}, 3 trusted}; ms only when trusted (as Polar writes it)"""
     date = pb_vi(1, dt.year) + pb_vi(2, dt.month) + pb_vi(3, dt.day)
-    tm = pb_vi(1, dt.hour) + pb_vi(2, dt.minute) + pb_vi(3, dt.second) + pb_vi(4, dt.microsecond // 1000)
-    return pb_ld(1, date) + pb_ld(2, tm) + pb_vi(3, 1)
+    tm = pb_vi(1, dt.hour) + pb_vi(2, dt.minute) + pb_vi(3, dt.second) + pb_vi(4, dt.microsecond // 1000 if trusted else 0)
+    return pb_ld(1, date) + pb_ld(2, tm) + pb_vi(3, 1 if trusted else 0)
 
 
 def route_encode(r):
@@ -596,9 +596,7 @@ def route_from_gpx(path, name=None, rid=None):
 def route_favorite(r, sport=1):
     from datetime import datetime
     tst = pb_ld(2, pb_ld(1, r["name"].encode())) + pb_ld(6, pb_vi(1, 3) + pb_ld(2, pb_vi(1, sport)) + pb_ld(4, b"") + pb_ld(5, pb_vi(1, r["id"])))
-    now = datetime.now()
-    dt = pb_ld(1, pb_vi(1, now.year) + pb_vi(2, now.month) + pb_vi(3, now.day)) + \
-         pb_ld(2, pb_vi(1, now.hour) + pb_vi(2, now.minute) + pb_vi(3, now.second) + pb_vi(4, 0)) + pb_vi(3, 0)
+    dt = pb_datetime(datetime.now(), trusted=False)   # ID.BPB: {1 id, 2 last modified, 3 created}
     return tst, pb_vi(1, r["id"]) + pb_ld(2, dt) + pb_ld(3, dt)
 
 
@@ -913,6 +911,14 @@ async def cmd_route_rm(args):
     await with_pftp(args, run)
 
 
+async def pftp_rmdir(p, d):
+    """REMOVE the files of folder d, then the folder (only folders LibreFlow wrote, checked by the caller)"""
+    for f, _ in await p.ls(d):
+        if not f.endswith("/"):
+            await p.remove(d + f)
+    await p.remove(d)
+
+
 async def route_steps(p, steps):
     for desc, st in steps:
         if st[0] == "move":
@@ -926,13 +932,9 @@ async def route_steps(p, steps):
             await p.put(f"/U/0/ROUTES/{hole}/PROUTE.BPB", data)
             if await p.get(f"/U/0/ROUTES/{hole}/PROUTE.BPB") != data:
                 print("  read-back differs: stopped before removing the old folder"); return
-            await p.remove(f"/U/0/ROUTES/{top}/PROUTE.BPB"); await p.remove(f"/U/0/ROUTES/{top}/")
+            await pftp_rmdir(p, f"/U/0/ROUTES/{top}/")
         else:
-            d = st[1]
-            for f, _ in await p.ls(d):
-                if not f.endswith("/"):
-                    await p.remove(d + f)
-            await p.remove(d)
+            await pftp_rmdir(p, st[1])
         print("  done: " + desc)
     print("/U/0/ROUTES/ now:", " ".join(sorted(n for n, _ in await p.ls("/U/0/ROUTES/"))),
           "  /U/0/FAV/ now:", " ".join(sorted(n for n, _ in await p.ls("/U/0/FAV/"))))

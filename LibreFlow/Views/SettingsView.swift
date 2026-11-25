@@ -24,11 +24,66 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // --- data in the analysis ---
+                // Ordered by how often it is used: training things first, import and reset last.
                 Section {
-                    Button { importing = true } label: { Label("Import file…", systemImage: "square.and.arrow.down") }
+                    NavigationLink { RoutesView() } label: { Label("Routes", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
+                    NavigationLink { ZonesView() } label: { Label("Training zones", systemImage: "gauge.with.dots.needle.33percent") }
+                } header: { Text("Training") } footer: {
+                    Text("Routes: GPX files and your own runs; the checked ones go to the watch at the next Sync. Training zones: used by the running plan, and can be sent to the watch.")
+                }
+
+                ShoesSection()
+
+                Section {
+                    numberRow("Max heart rate", $hrMax)
+                    numberRow("Resting heart rate", $hrRest)
+                    numberRow("Aerobic threshold", $aet)
+                    numberRow("Anaerobic threshold", $ant)
+                    if editing { Button("Apply") { apply() } }
+                } header: { Text("Heart rate") } footer: {
+                    Text("From your Polar profile when the import contains it. Easy = below the aerobic threshold, hard = above the anaerobic threshold. Used for zones, load and advice.")
+                }
+
+                Section {
+                    Toggle("Show map", isOn: $showMap)
+                        .onChange(of: showMap) { _, _ in model.pushMapSetting() }
+                    Toggle("Include heart rate in exports", isOn: $exportHeartRate)
+                    Toggle("Include GPS route in exports", isOn: $exportGPS)
+                } header: { Text("Privacy") } footer: {
+                    Text("Show map: routes are drawn on OpenStreetMap, and only the map tiles for the area you view are loaded from openstreetmap.org; off = drawn without a map, nothing is loaded. The two other switches decide what Export and To Strava contain: heart rate is left out by default, and without the GPS route an export is a TCX file without map, so where you start and finish is not shared.")
+                }
+
+                Section {
+                    Toggle("Upload to Strava", isOn: $model.stravaEnabled)
+                } header: { Text("Strava") } footer: {
+                    Text("Off: each activity has Export…, which saves a GPX file you can upload yourself, for example to Strava with a free account. On: that button becomes To Strava… and uploads directly via the Strava API, which needs a paid Strava subscription and the connection below.")
+                }
+                if model.stravaEnabled {
+                    Section {
+                        if strava.isConnected {
+                            LabeledContent("Connected", value: strava.athleteName ?? "yes")
+                            Button("Disconnect Strava", role: .destructive) { strava.disconnect() }
+                        } else {
+                            TextField("Client ID", text: $strava.clientId).keyboardType(.numberPad)
+                            SecureField("Client Secret", text: $secret)
+                            Button("Connect Strava") {
+                                strava.clientSecret = secret
+                                Task {
+                                    do { try await strava.connect(); stravaError = nil } catch { stravaError = error.localizedDescription }
+                                }
+                            }
+                            .disabled(strava.clientId.isEmpty || secret.isEmpty)
+                            if let stravaError { Text(stravaError).foregroundStyle(.red).font(.footnote) }
+                        }
+                    } header: { Text("Direct upload (paid Strava subscription)") } footer: {
+                        Text("At strava.com/settings/api, create an API application with Authorization Callback Domain \"localhost\" and enter its Client ID and Client Secret here.")
+                    }
+                }
+
+                Section {
                     Button { Task { await model.pageCommand("backup") } } label: { Label("Make backup", systemImage: "externaldrive") }
                         .disabled(s.count == 0 || s.isDemo)
+                    Button { importing = true } label: { Label("Import file…", systemImage: "square.and.arrow.down") }
                     Button { Task { await model.pageCommand("csv") } } label: { Label("Export as CSV", systemImage: "tablecells") }
                         .disabled(s.count == 0)
                     if s.isDemo {
@@ -37,90 +92,28 @@ struct SettingsView: View {
                         Button { Task { await model.pageCommand("demo"); model.tab = 0 } } label: { Label("Try with demo data", systemImage: "wand.and.stars") }
                     }
                     if !model.pageStatus.isEmpty { Text(model.pageStatus).font(.footnote).foregroundStyle(.secondary) }
-                } header: { Text("Import") } footer: {
-                    Text("Import your Polar export ZIP (from account.polar.com › Download your data), a backup made with Make backup, or training-session JSON files. Imports are added to what is there; duplicates are skipped. \(s.isDemo ? "Showing demo data (not saved)." : "\(s.count) trainings in the analysis.")")
+                } header: { Text("Your data") } footer: {
+                    Text("A backup is a ZIP with all your activities (summary, per-second data and routes), shoes, plan and zones. Import accepts the Polar export ZIP (account.polar.com › Download your data), a backup, or training-session JSON files; imports are added, duplicates skipped. \(s.isDemo ? "Showing demo data (not saved)." : "\(s.count) activities in the analysis.")")
                 }
 
-                // --- heart rate & zones ---
                 Section {
-                    numberRow("Max heart rate", $hrMax)
-                    numberRow("Resting heart rate", $hrRest)
-                    numberRow("Aerobic threshold", $aet)
-                    numberRow("Anaerobic threshold", $ant)
-                    if editing {
-                        Button("Apply") { apply() }
-                    }
-                    NavigationLink { ZonesView() } label: { Label("Training zones", systemImage: "gauge.with.dots.needle.33percent") }
-                } header: { Text("Heart rate") } footer: {
-                    Text("From your Polar profile when the import contains it. Easy = below the aerobic threshold, hard = above the anaerobic threshold. Used for zones, load and advice.")
-                }
-
-                ShoesSection()
-
-                // --- privacy: what exports and uploads contain ---
-                Section {
-                    Toggle("Include heart rate", isOn: $exportHeartRate)
-                    Toggle("Include GPS route", isOn: $exportGPS)
-                    Toggle("Show map", isOn: $showMap)
-                        .onChange(of: showMap) { _, _ in model.pushMapSetting() }
-                } header: { Text("Privacy") } footer: {
-                    Text("Show map: routes are shown on OpenStreetMap; the map tiles for the area you view are loaded from openstreetmap.org. Off: the route is drawn without a map and nothing is loaded from the internet. The two switches above apply to Export and To Strava. Heart rate is left out by default. Without the GPS route an export is saved as a TCX file (no map), and the route – including where you start and finish – is not shared.")
-                }
-
-                // --- Strava ---
-                Section {
-                    Toggle("Upload to Strava", isOn: $model.stravaEnabled)
-                } header: { Text("Strava") } footer: {
-                    Text("Off by default: runs then have an Export button that saves a GPX file (what it contains is set under Privacy) that you can upload yourself, for example to Strava with a free account. When on, that button becomes To Strava and uploads the run directly via the Strava API, which requires a paid Strava subscription and the connection below.")
-                }
-                if model.stravaEnabled {
-                Section {
-                    if strava.isConnected {
-                        LabeledContent("Connected", value: strava.athleteName ?? "yes")
-                        Button("Disconnect Strava", role: .destructive) { strava.disconnect() }
-                    } else {
-                        TextField("Client ID", text: $strava.clientId).keyboardType(.numberPad)
-                        SecureField("Client Secret", text: $secret)
-                        Button("Connect Strava") {
-                            strava.clientSecret = secret
-                            Task {
-                                do { try await strava.connect(); stravaError = nil } catch { stravaError = error.localizedDescription }
-                            }
-                        }
-                        .disabled(strava.clientId.isEmpty || secret.isEmpty)
-                        if let stravaError { Text(stravaError).foregroundStyle(.red).font(.footnote) }
-                    }
-                } header: { Text("Direct upload (paid Strava subscription)") } footer: {
-                    Text("Requires a paid Strava subscription (needed for the Strava API at strava.com/settings/api): create an API application with Authorization Callback Domain \"localhost\" and enter its Client ID and Client Secret here. Without it, use the file export.")
-                }
-                }
-
-                // --- watch ---
-                Section {
-                    NavigationLink { RoutesView() } label: { Label("Routes", systemImage: "point.topleft.down.to.point.bottomright.curvepath") }
                     Button(forgotWatch ? "Watch forgotten" : "Forget paired watch") {
                         PolarWatch.savedIdentifier = nil
                         forgotWatch = true
                     }
                     .disabled(forgotWatch || PolarWatch.savedIdentifier == nil)
-                } header: { Text("Watch") } footer: {
-                    Text("Routes: GPX files and your own runs; the checked ones go to the watch at the next Sync. To remove the pairing completely, also remove the iPhone on the watch and in iOS Settings › Bluetooth.")
-                }
-
-                // --- delete ---
-                Section {
                     Button("Delete analysis data", role: .destructive) { confirmClear = true }
                     Button("Delete all data in this app", role: .destructive) { confirmDelete = true }
-                } header: { Text("Data") } footer: {
-                    Text("All data stays on this iPhone (in the app's folder, also visible in the Files app). No account, no cloud, no tracking.")
+                } header: { Text("Reset") } footer: {
+                    Text("To remove the pairing completely, also remove the iPhone on the watch and in iOS Settings › Bluetooth. All data stays on this iPhone (in the app's folder, also visible in the Files app): no account, no cloud, no tracking.")
                 }
 
-                // --- about ---
                 Section {
                     LabeledContent("Version", value: Self.appVersion)
                 } header: { Text("About") }
             }
             .navigationTitle("Settings")
+            .syncControls(logButton: true)
             .scrollDismissesKeyboard(.interactively)
             .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Apply") { apply() } } }
             .task { await model.refreshSettings(); await model.refreshShoes(); fill() }
@@ -133,10 +126,10 @@ struct SettingsView: View {
             }
             .confirmationDialog("Delete the trainings in the analysis?", isPresented: $confirmClear, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) { Task { await model.pageCommand("clear"); fill() } }
-            } message: { Text("Raw watch files stay; they are added again on the next sync or app start.") }
+            } message: { Text("Downloaded watch files stay; they are added again at the next Sync or app start. Routes are kept.") }
             .confirmationDialog("Delete all trainings and analysis data from this app?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) { model.deleteAllData() }
-            } message: { Text("This cannot be undone. Your watch and your Polar Flow account are not affected.") }
+            } message: { Text("Activities, routes, shoes, plan and zones are deleted from this iPhone. This cannot be undone. Your watch and your Polar Flow account are not affected.") }
         }
     }
 

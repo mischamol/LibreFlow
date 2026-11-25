@@ -21,32 +21,21 @@ struct PlanFavorite: Identifiable, Equatable {
     }
 
     // MARK: encoding (only constructs seen in Polar Flow favorites or tested on the watch)
-    private static func vi(_ f: Int, _ v: Int) -> [UInt8] { PB.varint(UInt64(f << 3)) + PB.varint(UInt64(max(0, v))) }
-    private static func ld(_ f: Int, _ b: [UInt8]) -> [UInt8] { PB.varint(UInt64(f << 3 | 2)) + PB.varint(UInt64(b.count)) + b }
-    private static func text(_ f: Int, _ s: String) -> [UInt8] { ld(f, ld(1, Array(s.utf8))) }
-    private static func f32(_ f: Int, _ x: Float) -> [UInt8] { PB.varint(UInt64(f << 3 | 5)) + withUnsafeBytes(of: x.bitPattern.littleEndian, Array.init) }
-
     var tst: [UInt8] {
         var phs: [UInt8] = []
         for p in phases {
-            var b = Self.text(1, p.name) + Self.vi(2, 1)                    // change: automatic
+            var b = PB.text(1, p.name) + PB.vi(2, 1)                    // change: automatic
             b += p.distance
-                ? Self.ld(3, Self.vi(1, 2) + Self.f32(3, Float(p.metres)))   // goal: distance (metres)
-                : Self.ld(3, Self.vi(1, 1) + Self.ld(2, Self.vi(1, p.seconds / 3600) + Self.vi(2, p.seconds % 3600 / 60) + Self.vi(3, p.seconds % 60) + Self.vi(4, 0)))
+                ? PB.ld(3, PB.vi(1, 2) + PB.f32(3, Double(p.metres)))   // goal: distance (metres)
+                : PB.ld(3, PB.vi(1, 1) + PB.ld(2, PB.vi(1, p.seconds / 3600) + PB.vi(2, p.seconds % 3600 / 60) + PB.vi(3, p.seconds % 60) + PB.vi(4, 0)))
             b += p.pace
-                ? Self.ld(4, Self.vi(1, 2) + Self.ld(3, Self.vi(1, p.lo) + Self.vi(2, p.hi)))   // pace zones
-                : Self.ld(4, Self.vi(1, 1) + Self.ld(2, Self.vi(1, p.lo) + Self.vi(2, p.hi)))   // heart-rate zones
-            if let r = p.repeatCount, let j = p.jump { b += Self.vi(5, r) + Self.vi(6, j) }
-            phs += Self.ld(1, b)
+                ? PB.ld(4, PB.vi(1, 2) + PB.ld(3, PB.vi(1, p.lo) + PB.vi(2, p.hi)))   // pace zones
+                : PB.ld(4, PB.vi(1, 1) + PB.ld(2, PB.vi(1, p.lo) + PB.vi(2, p.hi)))   // heart-rate zones
+            if let r = p.repeatCount, let j = p.jump { b += PB.vi(5, r) + PB.vi(6, j) }
+            phs += PB.ld(1, b)
         }
-        let target = Self.vi(1, 2) + Self.ld(2, Self.vi(1, 1)) + Self.ld(4, phs)          // phased, sport 1 = running
-        return Self.text(2, name) + Self.text(5, description) + Self.ld(6, target)
-    }
-
-    static func idFile(_ id: UInt64, now: Date = Date()) -> [UInt8] {
-        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: now)
-        let dt = ld(1, vi(1, c.year!) + vi(2, c.month!) + vi(3, c.day!)) + ld(2, vi(1, c.hour!) + vi(2, c.minute!) + vi(3, c.second!) + vi(4, 0)) + vi(3, 0)
-        return PB.varint(UInt64(1 << 3)) + PB.varint(id) + ld(2, dt) + ld(3, dt)
+        let target = PB.vi(1, 2) + PB.ld(2, PB.vi(1, 1)) + PB.ld(4, phs)          // phased, sport 1 = running
+        return PB.text(2, name) + PB.text(5, description) + PB.ld(6, target)
     }
 }
 
@@ -65,9 +54,8 @@ final class WatchFavorites: ObservableObject {
     enum Phase: Equatable { case idle, reading, ready(Plan), writing(String), done(String), failed(String) }
     @Published var phase: Phase = .idle
     @Published var sessions: [PlanFavorite] = []
-    private var listing: [String] = []           // folders as read in the preview step
+    private var listing: [Int] = []           // folders as read in the preview step
 
-    private static func slotName(_ i: Int) -> String { String(format: "%02d", i) }
     private static func name(_ tst: [UInt8]) -> String { PBMessage(tst).msg(2)?.first(1)?.data.map { String(decoding: $0, as: UTF8.self) } ?? "?" }
     private var nextId: UInt64 {
         let k = "favIdCounter", n = UInt64(UserDefaults.standard.integer(forKey: k)) + 1
@@ -90,10 +78,10 @@ final class WatchFavorites: ObservableObject {
         do {
             try await w.connect()
             try await w.startSync()
-            let folders = try await w.ls("/U/0/FAV/").map { $0.name }.filter { $0.hasSuffix("/") }.compactMap { Int($0.dropLast()) }.sorted()
+            let folders = try await w.folderNumbers("/U/0/FAV/")
             var ours: [Int] = [], others: [(Int, String)] = [], routes: [Item] = []
             for f in folders {
-                let dir = "/U/0/FAV/\(Self.slotName(f))/"
+                let dir = PolarWatch.favDir(f)
                 let idFile = try? await w.get(dir + "ID.BPB")
                 let id = idFile.map { UInt64(PBMessage($0).int(1)) } ?? 0
                 let tst = id >= Self.ourIds ? try? await w.get(dir + "TST.BPB") : nil
@@ -105,7 +93,7 @@ final class WatchFavorites: ObservableObject {
                     others.append((f, name))
                 }
             }
-            listing = folders.map(Self.slotName)
+            listing = folders
             let otherSlots = Set(others.map { $0.0 }), total = others.count + routes.count + sessions.count
             guard otherSlots.allSatisfy({ $0 < total }) else {
                 await close(w)
@@ -148,18 +136,16 @@ final class WatchFavorites: ObservableObject {
             let todo = plan.write.filter { !$0.unchanged }
             for (n, item) in todo.enumerated() {
                 phase = .writing("Writing \(n + 1) of \(todo.count): \(item.name)")
-                let dir = "/U/0/FAV/\(Self.slotName(item.slot))/"
-                if !listing.contains(Self.slotName(item.slot)) { try await w.put(dir, []) }   // create the folder
+                let dir = PolarWatch.favDir(item.slot)
+                if !listing.contains(item.slot) { try await w.put(dir, []) }   // create the folder
                 try await w.put(dir + "TST.BPB", item.tst)
-                try await w.put(dir + "ID.BPB", item.idFile ?? PlanFavorite.idFile(nextId))
+                try await w.put(dir + "ID.BPB", item.idFile ?? PB.favoriteIdFile(nextId))
             }
             for slot in plan.remove {
-                phase = .writing("Removing old favorite \(Self.slotName(slot))")
-                let dir = "/U/0/FAV/\(Self.slotName(slot))/"
-                for f in try await w.ls(dir).map({ $0.name }) where !f.hasSuffix("/") { try await w.remove(dir + f) }
-                try await w.remove(dir)
+                phase = .writing("Removing an old LibreFlow favorite")
+                try await w.removeFolder(PolarWatch.favDir(slot))
             }
-            let after = try await w.ls("/U/0/FAV/").map { $0.name }.filter { $0.hasSuffix("/") }.count
+            let after = try await w.folderNumbers("/U/0/FAV/").count
             await close(w); session = nil
             phase = .done("\(plan.sessions) training(s) on the watch under Favorites\(plan.remove.isEmpty ? "" : ", \(plan.remove.count) old one(s) removed"). \(after) favorites in all.")
         } catch {

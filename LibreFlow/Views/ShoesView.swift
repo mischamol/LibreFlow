@@ -13,7 +13,7 @@ struct ShoesSection: View {
                 DisclosureGroup("Retired shoes (\(retired.count))") { ForEach(retired) { row($0) } }
             }
         } header: { Text("Shoes") } footer: {
-            Text("Runs count for the default shoes of their sport from the date the shoes are in use. Change the shoes of a single run under Latest Run.")
+            Text("Runs count for the default shoes of their sport from the date the shoes are in use. Change the shoes of a single activity with Edit… on that activity.")
         }
     }
 

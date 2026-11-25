@@ -98,40 +98,20 @@ struct PlannedRoute: Equatable, Codable {
     }
 
     // MARK: encoding
-    private static func key(_ f: Int, _ w: Int) -> [UInt8] { PB.varint(UInt64(f << 3 | w)) }
-    private static func vi(_ f: Int, _ v: UInt64) -> [UInt8] { key(f, 0) + PB.varint(v) }
-    private static func vi(_ f: Int, _ v: Int) -> [UInt8] { vi(f, UInt64(max(0, v))) }
-    private static func zig(_ f: Int, _ v: Int) -> [UInt8] { vi(f, UInt64(bitPattern: Int64((v << 1) ^ (v >> 63)))) }
-    private static func ld(_ f: Int, _ b: [UInt8]) -> [UInt8] { key(f, 2) + PB.varint(UInt64(b.count)) + b }
-    private static func f32(_ f: Int, _ x: Double) -> [UInt8] { key(f, 5) + withUnsafeBytes(of: Float(x).bitPattern.littleEndian, Array.init) }
-    private static func f64(_ f: Int, _ x: Double) -> [UInt8] { key(f, 1) + withUnsafeBytes(of: x.bitPattern.littleEndian, Array.init) }
-
-    /// PbSystemDateTime {1 date {y, m, d}, 2 time {h, m, s, ms}, 3 trusted}
-    private static func dateTime(_ now: Date, trusted: Int) -> [UInt8] {
-        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second, .nanosecond], from: now)
-        return ld(1, vi(1, c.year!) + vi(2, c.month!) + vi(3, c.day!))
-            + ld(2, vi(1, c.hour!) + vi(2, c.minute!) + vi(3, c.second!) + vi(4, trusted == 1 ? c.nanosecond! / 1_000_000 : 0)) + vi(3, trusted)
-    }
-
     func proute(now: Date = Date(), uuid: UUID = UUID()) -> [UInt8] {
-        typealias R = PlannedRoute
-        var b = R.ld(1, R.vi(1, id)) + R.ld(2, R.ld(1, Array(name.utf8))) + R.f32(3, length)
-        b += R.ld(4, R.f64(1, lat) + R.f64(2, lon)) + R.f32(5, alt)
-        for p in points { b += R.ld(6, R.zig(1, p.x) + R.zig(2, p.y) + R.vi(3, p.t) + R.zig(4, p.z) + R.vi(6, p.d)) }
-        let dt = R.dateTime(now, trusted: 1)
-        return b + R.vi(9, 1) + R.ld(10, dt) + R.ld(11, dt) + R.ld(12, Array(uuid.uuidString.lowercased().utf8))
+        var b = PB.ld(1, PB.vi(1, id)) + PB.text(2, name) + PB.f32(3, length)
+        b += PB.ld(4, PB.f64(1, lat) + PB.f64(2, lon)) + PB.f32(5, alt)
+        for p in points { b += PB.ld(6, PB.zig(1, p.x) + PB.zig(2, p.y) + PB.vi(3, p.t) + PB.zig(4, p.z) + PB.vi(6, p.d)) }
+        let dt = PB.dateTime(now, trusted: true)
+        return b + PB.vi(9, 1) + PB.ld(10, dt) + PB.ld(11, dt) + PB.ld(12, Array(uuid.uuidString.lowercased().utf8))
     }
 
     /// route favorite: exercise_target {1: 3 ROUTE, 2: {1 sport}, 4: {}, 5: {1 route id}} (as Polar Flow writes it)
     func favorite(sport: Int = 1) -> [UInt8] {
-        typealias R = PlannedRoute
-        return R.ld(2, R.ld(1, Array(name.utf8))) + R.ld(6, R.vi(1, 3) + R.ld(2, R.vi(1, sport)) + R.ld(4, []) + R.ld(5, R.vi(1, id)))
+        return PB.text(2, name) + PB.ld(6, PB.vi(1, 3) + PB.ld(2, PB.vi(1, sport)) + PB.ld(4, []) + PB.ld(5, PB.vi(1, id)))
     }
 
-    func idFile(now: Date = Date()) -> [UInt8] {
-        let dt = PlannedRoute.dateTime(now, trusted: 0)
-        return PlannedRoute.vi(1, id) + PlannedRoute.ld(2, dt) + PlannedRoute.ld(3, dt)
-    }
+    func idFile(now: Date = Date()) -> [UInt8] { PB.favoriteIdFile(id, now: now) }
 }
 
 /// Minimal GPX reader: track points (trkpt) and route points (rtept) with elevation and time, and the first name.
@@ -213,6 +193,8 @@ final class RouteLibrary: ObservableObject {
     func setChecked(_ id: UInt64, _ on: Bool) { if let i = entries.firstIndex(where: { $0.id == id }) { entries[i].checked = on; save() } }
     func rename(_ id: UInt64, _ name: String) { if let i = entries.firstIndex(where: { $0.id == id }) { entries[i].route.name = PlannedRoute.clip(name); save() } }
     func delete(_ id: UInt64) { entries.removeAll { $0.id == id }; save() }
+    /// Settings › Delete all data. LibreFlow routes still on the watch are adopted again at the next Sync.
+    func reset() { entries = []; flowRoutes = []; lastSync = nil; snapshot = []; try? FileManager.default.removeItem(at: url) }
     fileprivate func synced(onWatch: Set<UInt64>, adopted: [PlannedRoute], flow: [String], summary: String, snapshot: [Snap]) {
         self.snapshot = snapshot
         for r in adopted where !entries.contains(where: { $0.id == r.id }) { entries.append(Entry(route: r, checked: true, source: "From the watch")) }
@@ -230,17 +212,12 @@ enum RouteSync {
     private struct Fav { var slot: Int, id: UInt64, routeId: UInt64?, idFile: [UInt8], tst: [UInt8] }
     private struct OnWatch { var folder: Int, id: UInt64, name: String, size: Int, file: [UInt8]?; var ours: Bool { id >= WatchFavorites.ourIds } }
 
-    private static func folders(_ w: PolarWatch, _ path: String) async throws -> [Int] {
-        try await w.ls(path).map(\.name).filter { $0.hasSuffix("/") }.compactMap { Int($0.dropLast()) }.sorted()
-    }
-    private static func favDir(_ k: Int) -> String { String(format: "/U/0/FAV/%02d/", k) }
-    private static func routeDir(_ n: Int) -> String { "/U/0/ROUTES/\(n)/" }
-    private static func gapless(_ xs: [Int]) -> Bool { xs == Array(0..<xs.count) }
+    private static let favDir = PolarWatch.favDir, routeDir = PolarWatch.routeDir, gapless = PolarWatch.gapless
 
     static func reconcile(_ w: PolarWatch, log: (String) -> Void) async throws {
         let lib = RouteLibrary.shared
         var routes: [OnWatch] = []
-        for n in try await folders(w, "/U/0/ROUTES/") {
+        for n in try await w.folderNumbers("/U/0/ROUTES/") {
             let size = try await w.ls(routeDir(n)).first { $0.name == "PROUTE.BPB" }?.size ?? -1
             if let c = lib.snapshot.first(where: { $0.folder == n && $0.size == size }) {   // unchanged since the last Sync
                 routes.append(OnWatch(folder: n, id: c.id, name: c.name, size: size, file: nil)); continue
@@ -250,7 +227,7 @@ enum RouteSync {
         }
         func file(_ r: OnWatch) async throws -> [UInt8] { if let f = r.file { return f }; return try await w.get(routeDir(r.folder) + "PROUTE.BPB") }
         var favs: [Fav] = []
-        for k in try await folders(w, "/U/0/FAV/") {
+        for k in try await w.folderNumbers("/U/0/FAV/") {
             let idFile = try await w.get(favDir(k) + "ID.BPB"), tst = try await w.get(favDir(k) + "TST.BPB")
             let target = PBMessage(tst).msg(6)
             favs.append(Fav(slot: k, id: UInt64(PBMessage(idFile).int(1)), routeId: target?.int(1) == 3 ? target?.msg(5).map { UInt64($0.int(1)) } : nil, idFile: idFile, tst: tst))
@@ -287,8 +264,7 @@ enum RouteSync {
                     try await w.put(favDir(slot) + "TST.BPB", last.tst); try await w.put(favDir(slot) + "ID.BPB", last.idFile)
                     favs[favs.firstIndex { $0.slot == slot }!] = Fav(slot: slot, id: last.id, routeId: last.routeId, idFile: last.idFile, tst: last.tst)
                 }
-                for f in try await w.ls(favDir(last.slot)).map(\.name) where !f.hasSuffix("/") { try await w.remove(favDir(last.slot) + f) }
-                try await w.remove(favDir(last.slot))
+                try await w.removeFolder(favDir(last.slot))
                 favs.removeLast()
             }
             if top.folder != cur.folder {   // the last route moves into the freed folder, unchanged
@@ -297,7 +273,7 @@ enum RouteSync {
                 guard try await w.get(routeDir(cur.folder) + "PROUTE.BPB") == data else { throw PolarError.protocolError(-1) }
                 routes[routes.firstIndex { $0.folder == cur.folder }!] = OnWatch(folder: cur.folder, id: top.id, name: top.name, size: data.count, file: data)
             }
-            try await w.remove(routeDir(top.folder) + "PROUTE.BPB"); try await w.remove(routeDir(top.folder))
+            try await w.removeFolder(routeDir(top.folder))
             routes.removeLast()
             removed += 1; log("Routes: removed \"\(r.name)\".")
         }

@@ -428,3 +428,20 @@ final class PolarWatch: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
 extension String {
     func ifEmpty(_ s: String) -> String { isEmpty ? s : self }
 }
+
+// MARK: folders LibreFlow writes (favorites and routes); both must stay numbered without gaps from 0
+extension PolarWatch {
+    static func favDir(_ k: Int) -> String { String(format: "/U/0/FAV/%02d/", k) }
+    static func routeDir(_ n: Int) -> String { "/U/0/ROUTES/\(n)/" }
+    static func gapless(_ xs: [Int]) -> Bool { xs == Array(0..<xs.count) }
+
+    /// the numbered subfolders of a folder (/U/0/FAV/ → [0, 1, 2]), sorted
+    func folderNumbers(_ path: String) async throws -> [Int] {
+        try await ls(path).map(\.name).filter { $0.hasSuffix("/") }.compactMap { Int($0.dropLast()) }.sorted()
+    }
+    /// REMOVE the files of a folder, then the folder itself
+    func removeFolder(_ dir: String) async throws {
+        for f in try await ls(dir).map(\.name) where !f.hasSuffix("/") { try await remove(dir + f) }
+        try await remove(dir)
+    }
+}

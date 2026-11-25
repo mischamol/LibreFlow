@@ -36,90 +36,19 @@ struct LibreFlowApp: App {
     }
 }
 
-/// One of the three analysis tabs. They share a single web view, which moves into the visible tab.
+/// One of the four page tabs. They share a single web view, which moves into the visible tab.
 struct AnalysisView: View {
     let tag: Int
     let title: String
     @EnvironmentObject var model: AppModel
-    @EnvironmentObject var sync: WatchSync
-    @State private var showLog = false
-    @State private var showHelp = false
 
     var body: some View {
         NavigationStack {
             WebSlot(webView: model.webView, active: model.tab == tag)
                 .ignoresSafeArea(edges: .bottom)
-                .safeAreaInset(edge: .top, spacing: 0) { statusBar }
                 .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button { showLog = true } label: { Image(systemName: "list.bullet.rectangle") }
-                            .accessibilityLabel("Sync log")
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        if sync.running {
-                            Button("Cancel", role: .destructive) { sync.cancel() }
-                        } else {
-                            Button { sync.start(); showHelp = PolarWatch.savedIdentifier == nil } label: {
-                                Label("Sync", systemImage: "arrow.triangle.2.circlepath")
-                            }
-                        }
-                    }
-                }
-                .sheet(isPresented: $showLog) { SyncLogView() }
-                .alert("Sync with your watch", isPresented: $showHelp) {
-                    Button("OK") {}
-                } message: {
-                    Text("The app connects to your watch by itself when it is already paired with this iPhone; you do not need to press anything on the watch. Not found? Press Sync on the watch. First time: put the watch in pairing mode (Settings › General settings › Pair and sync › Pair and sync phone) and accept the pairing request. Only new trainings are read. The watch is only changed for the routes you checked under Settings › Watch › Routes.")
-                }
-        }
-    }
-
-    @ViewBuilder private var statusBar: some View {
-        if sync.running {
-            VStack(alignment: .leading, spacing: 4) {
-                ProgressView(value: sync.progress)
-                Text(sync.lines.last ?? "Syncing…").font(.footnote).foregroundStyle(.secondary).lineLimit(2)
-            }
-            .padding(.horizontal).padding(.vertical, 8)
-            .background(.bar)
-        } else if let r = sync.lastResult {
-            HStack {
-                Text(r).font(.footnote)
-                Spacer()
-                Button("Log") { showLog = true }.font(.footnote)
-                Button { sync.lastResult = nil } label: { Image(systemName: "xmark") }.font(.footnote)
-            }
-            .padding(.horizontal).padding(.vertical, 8)
-            .background(.bar)
-        }
-    }
-}
-
-struct SyncLogView: View {
-    @EnvironmentObject var sync: WatchSync
-    @EnvironmentObject var model: AppModel
-    @Environment(\.dismiss) private var dismiss
-    var body: some View {
-        NavigationStack {
-            List {
-                if sync.lines.isEmpty { Text("No sync yet.").foregroundStyle(.secondary) }
-                ForEach(Array(sync.lines.enumerated()), id: \.offset) { _, l in
-                    Text(l).font(.footnote.monospaced())
-                }
-            }
-            .navigationTitle("Sync log")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
-                ToolbarItem(placement: .primaryAction) {
-                    Button { model.shareURL = .init(url: model.store.root.appendingPathComponent("sync-log.txt")) } label: {
-                        Image(systemName: "square.and.arrow.up")
-                    }
-                    .disabled(!FileManager.default.fileExists(atPath: model.store.root.appendingPathComponent("sync-log.txt").path))
-                }
-            }
+                .syncControls(logButton: true)
         }
     }
 }

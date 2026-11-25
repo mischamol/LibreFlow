@@ -146,51 +146,46 @@ ol{padding-left:20px}
   Open <code>libreflow.html</code> in Safari or Chrome (double-click it in the Finder) to keep your data.
   </div>
 <div id="settingsView">
-<section class="card" id="loader">
-  <h2>Import</h2>
-  <p class="hint">Choose the Polar export ZIP or (faster for large exports) the unzipped folder, the <code>trainingen_json</code> folder from the watch, or a backup file.
-    Every import is added to what is already there (duplicates are skipped) and stored only on this device.</p>
-  <div class="drop" id="drop">
-    <div class="row" style="justify-content:center">
-      <label class="btn primary">Choose file<input type="file" id="fZip" accept=".zip,.json" multiple hidden></label>
-      <label class="btn">Choose folder<input type="file" id="fDir" webkitdirectory multiple hidden></label>
-      <button id="btnDemo">Try with demo data</button>
+  <section class="card" id="loader">   <!-- first while there is no data; start() moves it to the end -->
+    <h2>Your data</h2>
+    <p class="hint">Import the Polar export ZIP or (faster for large exports) the unzipped folder, the <code>trainingen_json</code> folder from <code>polar_ble.py</code>, or a backup.
+      Every import is added to what is already there (duplicates are skipped) and stored only on this device.</p>
+    <div class="drop" id="drop">
+      <div class="row" style="justify-content:center">
+        <label class="btn primary">Choose file<input type="file" id="fZip" accept=".zip,.json" multiple hidden></label>
+        <label class="btn">Choose folder<input type="file" id="fDir" webkitdirectory multiple hidden></label>
+        <button id="btnDemo">Try with demo data</button>
+      </div>
+      <p class="hint" style="margin:10px 0 0">…or drop the files here.</p>
+    </div>
+    <div class="row" style="margin-top:10px">
       <button id="btnBackup" class="hidden">Make backup</button>
+      <button id="btnCsv" class="hidden">Export as CSV</button>
       <button id="btnClear" class="hidden">Delete stored data</button>
     </div>
-    <p class="hint" style="margin:10px 0 0">…or drop the files here.</p>
-  </div>
-  <p id="status"></p>
-  <details>
-    <summary>How do I get my full Polar history?</summary>
-    <ol>
-      <li>Sign in at <b>account.polar.com</b> (the same account as Polar Flow).</li>
-      <li>Choose <b>“Download your data”</b> and request the export.</li>
-      <li>You get an e-mail with a download link to a ZIP containing <code>training-session-*.json</code> files.</li>
-      <li>Load that ZIP (or the unzipped folder) here. The iPhone app can import the same ZIP directly (Settings › Import file…).</li>
-    </ol>
-    <p class="hint">The Polar AccessLink API only returns trainings from the moment you connect; the export is the way to get your full history.</p>
-  </details>
-</section>
-  <section class="card hidden" id="settingsCard">
-    <h2>Heart rate and map</h2>
-    <div class="row">
-      <label>Max heart rate <input type="number" id="hrMax" min="120" max="230" style="width:80px"></label>
-      <span class="hint" id="hrMaxHint" style="margin:0"></span>
-      <button id="btnCsv">Export as CSV</button>
+    <p class="hint" style="margin:6px 0 0">A backup is a ZIP with everything (summary, per-second data, routes, shoes, plan and zones); the iPhone app imports it too.</p>
+    <p id="status"></p>
+    <details>
+      <summary>How do I get my full Polar history?</summary>
+      <ol>
+        <li>Sign in at <b>account.polar.com</b> (the same account as Polar Flow).</li>
+        <li>Choose <b>“Download your data”</b> and request the export.</li>
+        <li>You get an e-mail with a download link to a ZIP containing <code>training-session-*.json</code> files.</li>
+        <li>Load that ZIP (or the unzipped folder) here. The iPhone app imports the same ZIP (Settings › Your data › Import file…).</li>
+      </ol>
+      <p class="hint">The watch itself keeps only its last few trainings, so the export is the way to get your full history.</p>
+    </details>
+  </section>
+  <section class="card" id="shoesCard">
+    <div class="row" style="justify-content:space-between">
+      <div><h2>Shoes</h2><p class="hint" style="margin:0">Distance per pair. Runs count for the default shoes of their sport from the date the shoes are in use; change it per activity with Edit.</p></div>
+      <button id="btnAddShoe">+ Add shoes</button>
     </div>
-    <div class="row" style="margin-top:8px">
-      <label>Resting heart rate <input type="number" id="hrRest" min="30" max="100" style="width:70px"></label>
-      <label>Aerobic threshold <input type="number" id="aet" min="90" max="210" style="width:70px"></label>
-      <label>Anaerobic threshold <input type="number" id="ant" min="100" max="220" style="width:70px"></label>
-      <span class="hint" style="margin:0">From your Polar profile when the export contains it. Easy = below the aerobic threshold, hard = above the anaerobic threshold.</span>
-    </div>
-    <div class="sports" id="sports" style="margin-top:10px"></div>
-    <label style="display:block;margin-top:10px"><input type="checkbox" id="mapOn"> Show routes on a map (map tiles are loaded from OpenStreetMap; off = route drawn without map background, nothing loaded)</label>
+    <div id="shoeList" style="margin-top:8px"></div>
   </section>
   <section class="card" id="zonesCard">
     <h2>Training zones</h2>
-    <p class="hint">Used in the running plan; later they can also be sent to the watch. Edit the limits, or leave them automatic.</p>
+    <p class="hint">Used by the running plan for each session's pace and heart-rate zone. Leave them automatic or set the limits yourself; the iPhone app can also send them to the watch.</p>
     <div class="grid">
       <div><h2 style="font-size:15px">Heart rate</h2>
         <label><input type="checkbox" id="zHrAuto"> Automatic (from max and resting heart rate and the two thresholds)</label>
@@ -201,14 +196,24 @@ ol{padding-left:20px}
     </div>
     <div class="row" style="margin-top:8px"><button id="zSave" class="primary">Save zones</button><span class="hint" id="zMsg" style="margin:0"></span></div>
   </section>
-  <section class="card" id="shoesCard">
-    <div class="row" style="justify-content:space-between">
-      <div><h2>Shoes</h2><p class="hint" style="margin:0">Distance per pair. Runs count for the default shoes of their sport from the date the shoes are in use; change it per activity with Edit.</p></div>
-      <button id="btnAddShoe">+ Add shoes</button>
+  <section class="card hidden" id="settingsCard">
+    <h2>Heart rate</h2>
+    <div class="row">
+      <label>Max heart rate <input type="number" id="hrMax" min="120" max="230" style="width:80px"></label>
+      <span class="hint" id="hrMaxHint" style="margin:0"></span>
     </div>
-    <div id="shoeList" style="margin-top:8px"></div>
+    <div class="row" style="margin-top:8px">
+      <label>Resting heart rate <input type="number" id="hrRest" min="30" max="100" style="width:70px"></label>
+      <label>Aerobic threshold <input type="number" id="aet" min="90" max="210" style="width:70px"></label>
+      <label>Anaerobic threshold <input type="number" id="ant" min="100" max="220" style="width:70px"></label>
+    </div>
+    <p class="hint" style="margin:8px 0 0">From your Polar profile when the export contains it. Easy = below the aerobic threshold, hard = above the anaerobic threshold. Used for zones, load and advice.</p>
   </section>
-
+  <section class="card">
+    <h2>Map</h2>
+    <label style="display:block"><input type="checkbox" id="mapOn"> Show routes on a map</label>
+    <p class="hint" style="margin:6px 0 0">Map tiles for the area you view are loaded from openstreetmap.org. Off: the route is drawn without a map and nothing is loaded from the internet.</p>
+  </section>
 </div>
 
 <div id="appEmpty" class="card hidden"><h2>No trainings yet</h2>
@@ -355,7 +360,7 @@ ol{padding-left:20px}
     <label>Remind me at (km, 0 = off) <input type="number" id="shAlert" min="0" step="50"></label>
     <label>Distance before tracking (km) <input type="number" id="shStart" min="0" step="1"></label>
   </div>
-  <fieldset><legend class="hint">Default shoes for</legend><div id="shSports"></div></fieldset>
+  <fieldset><legend class="hint">Default shoes for</legend><div id="shSports" class="sports"></div></fieldset>
   <label style="font-size:14px"><input type="checkbox" id="shRetired"> Retired (no longer used for new runs)</label>
   <div class="row" style="margin-top:14px">
     <button value="save" class="primary">Save</button>
@@ -369,7 +374,7 @@ ol{padding-left:20px}
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
-let ALL = [], RUNS = [], selected = new Set(), charts = {}, hrMax = null;
+let ALL = [], RUNS = [], charts = {}, hrMax = null;
 // Analysis: '' = all activities, or one sport (remembered per device)
 let ANA_SPORT = (() => { try { return localStorage.getItem('libreflow.anaSport') || ''; } catch { return ''; } })();
 const NOUNS = {RUNNING: ['run', 'runs'], TRAIL_RUNNING: ['run', 'runs'], TREADMILL_RUNNING: ['run', 'runs'], CYCLING: ['ride', 'rides'],
@@ -672,7 +677,8 @@ function clearStore(skipConfirm){
   $('#app').classList.add('hidden');
   $('#appEmpty').classList.remove('hidden');
   $('#settingsCard').classList.add('hidden');
-  $('#btnClear').classList.add('hidden');
+  for (const id of ['#btnClear', '#btnBackup', '#btnCsv']) $(id).classList.add('hidden');
+  $('#settingsView').prepend($('#loader'));   // nothing yet: import first
   renderPlan();
   status('Stored data deleted.');
 }
@@ -707,8 +713,9 @@ function start(sessions){
   ALL.forEach(s => { const e = EDITS[sessionKey(s)]; if (e?.sport) s.sport = e.sport; });
   // running cadence below 120 is per leg (strides/min): show steps per minute, like Polar Flow
   ALL.forEach(s => { if (s.cad && s.cad < 120 && /RUN|LOOP|JOG/.test(s.sport)) s.cad *= 2; });
-  $('#btnClear').classList.toggle('hidden', isDemo || !ALL.length);
-  $('#btnBackup').classList.toggle('hidden', isDemo || !ALL.length);
+  for (const id of ['#btnClear', '#btnBackup']) $(id).classList.toggle('hidden', isDemo || !ALL.length);
+  $('#btnCsv').classList.toggle('hidden', !ALL.length);   // the demo can be exported as CSV too
+  $('#settingsView').append($('#loader'));   // with data: import and backup last (used least)
   const counts = {};
   ALL.forEach(s => counts[s.sport] = (counts[s.sport]||0) + 1);
   const sportsList = Object.keys(counts).sort((a,b) => counts[b]-counts[a]);
@@ -716,7 +723,6 @@ function start(sessions){
   $('#anaSport').innerHTML = `<option value="">All activities (${ALL.length})</option>` +
     sportsList.map(sp => `<option value="${sp}">${sportLabel(sp)} (${counts[sp]})</option>`).join('');
   $('#anaSport').value = ANA_SPORT;
-  $('#sports').innerHTML = '';
   hrMax = isDemo ? null : userHrMax;
   $('#app').classList.remove('hidden');
   $('#appEmpty').classList.add('hidden');
@@ -1282,7 +1288,7 @@ function openShoe(id){
   $('#shBrand').value = g.brand; $('#shModel').value = g.model; $('#shName').value = g.name || '';
   $('#shFrom').value = g.from || ''; $('#shAlert').value = g.alertKm ?? 0; $('#shStart').value = g.startKm || 0; $('#shRetired').checked = !!g.retired;
   const sports = shoeSportOptions();
-  $('#shSports').innerHTML = sports.map(s => `<label><input type="checkbox" value="${s}" ${(g.sports || []).includes(s) ? 'checked' : ''}> ${s.replace(/_/g, ' ').toLowerCase()}</label>`).join('');
+  $('#shSports').innerHTML = sports.map(s => `<label><input type="checkbox" value="${s}" ${(g.sports || []).includes(s) ? 'checked' : ''}> ${sportLabel(s)}</label>`).join('');
   $('#shDelete').classList.toggle('hidden', !id);
   $('#shoeDlg').showModal();
 }
@@ -2144,7 +2150,7 @@ function planFavorites(){
   return {sessions: out, zonesAuto: zones().paceAuto};
 }
 window.appPlanFavorites = () => planFavorites();
-// Settings › Watch › Routes › From a run: the newest activities (the app checks which have a GPS route in raw/<key>.json)
+// Settings › Routes › From a run: the newest activities (the app checks which have a GPS route in raw/<key>.json)
 window.appRouteRuns = () => ALL.slice(-150).reverse().map(s => ({key: String(sessionKey(s)), date: ymdStr(s.date),
   time: `${pad(s.date.getHours())}:${pad(s.date.getMinutes())}`, sport: sportLabel(s.sport), km: +s.km.toFixed(2)}));
 
@@ -2227,15 +2233,12 @@ if (APP){
 
 /* ---------- API for the iPhone app's native Settings tab ---------- */
 window.appSettings = () => {
-  const counts = {}; ALL.forEach(s => counts[s.sport] = (counts[s.sport]||0) + 1);
   const p = prof();
-  return {count: ALL.length, isDemo, hrMax: hrMax || p.hrMax, hrMaxFromProfile: !!PROFILE.hrMax && !userHrMax, hrRest: p.hrRest, aet: p.aet, ant: p.ant,
-    sports: Object.keys(counts).sort((a,b) => counts[b]-counts[a]).map(s => ({id: s, name: sportLabel(s), count: counts[s], on: selected.has(s)}))};
+  return {count: ALL.length, isDemo, hrMax: hrMax || p.hrMax, hrMaxFromProfile: !!PROFILE.hrMax && !userHrMax, hrRest: p.hrRest, aet: p.aet, ant: p.ant};
 };
 window.appSetSettings = o => {
   if (o.hrMax){ hrMax = userHrMax = +o.hrMax; }
   for (const k of ['hrRest','aet','ant']) if (o[k] && +o[k] !== prof()[k]){ PROFILE[k] = +o[k]; PROFILE.userSet = [...new Set([...(PROFILE.userSet||[]), k])]; }
-  if (Array.isArray(o.sports)){ selected = new Set(o.sports); $('#sports').querySelectorAll('input').forEach(cb => cb.checked = selected.has(cb.value)); }
   if (!isDemo) saveStore();
   if (ALL.length) refresh();
   return window.appSettings();

@@ -55,6 +55,7 @@ struct ZonesView: View {
             watchSection
         }
         .navigationTitle("Training zones")
+        .syncControls()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
