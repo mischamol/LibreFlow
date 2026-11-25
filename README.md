@@ -105,6 +105,9 @@ only counts for the period it describes), or start from scratch with easy runnin
 feasible you get a message. Every session explains why it looks the way it does, with numbered references (Daniels,
 Seiler, Bosquet, Frandsen and others).
 
+All rules of the analysis and the plan, with their limits, explanation and links to the research, are listed in
+[docs/RULES.md](docs/RULES.md).
+
 **Send to watch…** puts the next 7 days on the watch as favorites, with distance goals, heart-rate zones for easy
 running and your pace zones for the fast parts. Earlier LibreFlow favorites are replaced.
 

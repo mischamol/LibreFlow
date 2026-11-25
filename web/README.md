@@ -19,6 +19,7 @@ Open it in Safari or Chrome (double-click it in the Finder) and load your Polar 
 - **Analysis**: advice with its sources, charts, deeper analysis, predictions and records; all activities or one
   sport.
 - **Running Plan**: adaptive training plan for a goal race, with the reasoning and sources per session.
+- Every rule of the advice and the plan, with its source: [docs/RULES.md](../docs/RULES.md).
 - **All Activities**: list with a filter by sport.
 - **Settings**, in order of use: shoes, training zones, heart rate, map, and *Your data* (import, backup, CSV, demo
   data, delete). Without any data, *Your data* comes first.

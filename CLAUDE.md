@@ -159,7 +159,8 @@ are in `CLAUDE.local.md`, which is not in git.
   days old). Distance-based load advice (ratio, weekly jump, long-run share) counts running only, also under
   "All activities" (`analyse()` → `lr`; another sport only when no running is selected); other sports count via the
   heart-rate based form (all sports). The plan's flags: spike = ratio > 1.3, fatigue = effDrop or form < −40% (break-nuanced text). Change a
-  rule there, never in one view only.
+  rule there, never in one view only. `docs/RULES.md` lists every rule, limit and source (with DOI links): update it
+  together with any rule or `PLAN_SRC` change.
   Analysis advice uses the same history baseline (`analyse()` → `block` = best 8-week avg of 2 years, `experienced` =
   ≥ 12 of 24 months with ≥ 4 activities): load ratio and weekly jump compare with max(4-week avg, block) for
   experienced runners ("Back to your usual volume" when the plain ratio > 1.3 but vs. block ≤ 1.3), and the long-run
