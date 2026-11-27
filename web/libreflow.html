@@ -565,6 +565,12 @@ async function loadFiles(fileList){
 }
 
 // also called by the iPhone app with the JSON texts of freshly synced watch trainings
+// app: which watch training ids (YYYYMMDD_HHMMSS, local start time) the page does not have; deleted ones count as present
+window.appMissing = ids => isDemo ? [] : ids.filter(id => {
+  const m = /^(\d{4})(\d\d)(\d\d)_(\d\d)(\d\d)(\d\d)$/.exec(id); if (!m) return false;
+  const k = sessionKey({date: new Date(+m[1], m[2]-1, +m[3], +m[4], +m[5], +m[6])});
+  return !DELETED.has(k) && !ALL.some(s => sessionKey(s) === k);
+});
 window.appImport = texts => importEntries(texts.map((t, i) => ({name: `training-session-${i}.json`, text: async () => t})));
 
 async function importEntries(entries){
@@ -649,7 +655,9 @@ function saveFile(name, text, type){
 }
 function saveStore(){
   if (isDemo) return false;
-  if (APP){ APP.postMessage({cmd: 'store', text: pack(true)}); storeNote = ''; return true; }
+  // in the app: also keep the page's own copy current, so an in-page reload (e.g. back from the demo) never
+  // falls back to the data handed over when the app started
+  if (APP){ const text = pack(true); window.__LIBREFLOW_STORE = text; APP.postMessage({cmd: 'store', text}); storeNote = ''; return true; }
   try { localStorage.setItem(STORE, pack(true)); storeNote = ''; return true; }
   catch {
     try { localStorage.setItem(STORE, pack(false)); storeNote = ' (without per-run chart series: storage full)'; return true; }
@@ -669,7 +677,7 @@ try { for (const k of OLD_STORES) if (!localStorage.getItem(STORE) && localStora
 function storageWorks(){ if (APP) return true; try { localStorage.setItem(STORE + '.t', '1'); localStorage.removeItem(STORE + '.t'); return true; } catch { return false; } }
 function clearStore(skipConfirm){
   if (!skipConfirm && !confirm('Delete all stored trainings from this device? Raw watch files are kept.')) return;
-  if (APP) APP.postMessage({cmd: 'store', text: ''});
+  if (APP){ window.__LIBREFLOW_STORE = ''; APP.postMessage({cmd: 'store', text: ''}); }
   try { localStorage.removeItem(STORE); } catch {}
   RAW.clear();
   ALL = []; RUNS = []; ACTS = []; userHrMax = null; isDemo = false; PROFILE = {}; GEAR = []; ASSIGN = {}; EDITS = {}; DELETED = new Set(); PLAN = null; ZONES = {hr: null, pace: null};
@@ -1077,25 +1085,32 @@ function renderAdvice(A){
   if (PLAN_OUT && PLAN_OUT.level === 2) add('bad', 'Running goal not feasible as planned', `${PLAN_OUT.status.filter(x => x.lvl === 'bad').map(x => x.t + ': ' + x.x).join(' ')} See the Running Plan tab.`);
   else if (PLAN_OUT && PLAN_OUT.level === 1) add('warn', 'Running goal: caveats', `${PLAN_OUT.status.filter(x => x.lvl === 'warn').map(x => x.t).join('; ')}. See the Running Plan tab.`);
   const order = {bad:0, warn:1, good:2, info:3};
-  // where each piece of advice comes from: numbered sources (same list as the running plan), or a plain
-  // "rule of thumb" when no study backs that exact limit
-  const RULE = 'rule', SRC_OF = [
+  // where each piece of advice comes from: numbered sources (same list as the running plan), plus a note when the
+  // exact limit is a rule of thumb rather than a number from those sources
+  const FORM_NOTE = ' The 42/7-day time constants are the usual ones from cycling software; the limits (form below −20% / −40% of fitness) are a rule of thumb: the model is useful as a trend, its exact numbers less so.';
+  const SRC_OF = [
     [/^Back to your usual volume/, ['FRANDSEN2025', 'IMPELLIZZERI2020']],
     [/^(Load rising too fast|Solid build-up|Easy week|Load in balance)/, ['GABBETT2016', 'IMPELLIZZERI2020']],
     [/^Big jump/, ['NIELSEN2014', 'BUIST2008', 'FRANDSEN2025']],
     [/^(Few truly easy|Good intensity|Intensity)/, ['SEILER2006', 'STOGGL2014', 'CASADO2021']],
     [/^(Aerobic fitness|Efficiency dropping|Fatigue signal)/, ['BUCHHEIT2014']],
     [/^Break/, ['COYLE1984', 'MUJIKA2000']],
-    [/^(A lot of fatigue|Fatigue after|You are building up|Rested|Load and recovery)/, ['MORTON1990', 'HELLARD2006']],
+    [/^(A lot of fatigue|Fatigue after|You are building up|Rested|Load and recovery)/, ['MORTON1990', 'HELLARD2006', 'ALLEN2019'], FORM_NOTE],
     [/^Cadence/, ['HEIDERSCHEIT2011']],
-    [/^(Long .* relatively heavy|No rest day|Frequency|Strong aerobic base|Heart rate drifts|Aerobic decoupling|Shoes)/, RULE],
+    [/^Long .* relatively heavy/, ['DANIELS', 'FRANDSEN2025'], ' Daniels advises a long run of at most 25–30% of the week; warning only above 40% is a rule of thumb.'],
+    [/^No rest day/, ['MEEUSEN2013'], ' The consensus advises a rest day every week; warning only after 10 days in a row is a rule of thumb.'],
+    [/^Frequency/, ['GARBER2011'], ' Guidelines advise aerobic exercise on at least 3 days a week; the limit of 2.5 is a rule of thumb.'],
+    [/^(Strong aerobic base|Heart rate drifts|Aerobic decoupling)/, ['FRIEL', 'SMYTH2022'], ' The 5% target is a coaching guideline, not a limit from a study; 8% as drift is a rule of thumb.'],
+    [/^Shoes/, ['COOK1985'], ' A link between worn shoes and injuries is not proven; the 400 km default is a rule of thumb.'],
+    [/^Polar running index/, [], "Based on: Polar's own figure, computed by the watch from heart rate and speed."],
+    [/^Your seasonal pattern/, [], 'Based on: your own activities only; no rule from research.'],
+    [/^Running goal/, [], "Based on: the running plan's checks; their sources are listed with the plan."],
   ];
   const used = new Set();
   const aCite = keys => keys.map(k => { used.add(k); return `<sup><a href="#asrc-${k}">[${PLAN_SRC_KEYS.indexOf(k) + 1}]</a></sup>`; }).join('');
   const srcNote = o => {
     const m = SRC_OF.find(([re]) => re.test(o.t)); if (!m) return '';
-    const limit = /fatigue|building up|Rested|Load and recovery/i.test(o.t) ? ' The limits (form below −20% / −40% of fitness) are a rule of thumb; the model is useful as a trend, its exact numbers less so.' : '';
-    return `<p class="hint" style="margin:6px 0 0">${m[1] === RULE ? 'Rule of thumb: no study behind this exact limit.' : 'Based on: ' + aCite(m[1]) + limit}</p>`;
+    return `<p class="hint" style="margin:6px 0 0">${m[1].length ? `Based on: ${aCite(m[1])}${m[2] || ''}` : m[2]}</p>`;
   };
   $('#advice').innerHTML = out.sort((a,b)=>order[a.lvl]-order[b.lvl]).map((o,i) => `<details class="adv ${o.lvl}"${i === 0 ? ' open' : ''}><summary>${o.t}</summary><div>${o.x}${srcNote(o)}</div></details>`).join('') || '<p>Too little recent data for advice.</p>';
   $('#adviceSources').innerHTML = [...used].sort((a, b) => PLAN_SRC_KEYS.indexOf(a) - PLAN_SRC_KEYS.indexOf(b))
@@ -1586,6 +1601,15 @@ const PLAN_SRC = {
   HELLARD2006: 'Hellard P, Avalos M, Lacoste L, Barale F, Chatard JC, Millet GP. Assessing the limitations of the Banister model in monitoring training. J Sports Sci 2006;24:509–520. doi:10.1080/02640410500244697',
   HEIDERSCHEIT2011: 'Heiderscheit BC, Chumanov ES, Michalski MP, Wille CM, Ryan MB. Effects of step rate manipulation on joint mechanics during running. Med Sci Sports Exerc 2011;43:296–302. doi:10.1249/MSS.0b013e3181ebedf4',
   BLAGROVE2018: 'Blagrove RC, Howatson G, Hayes PR. Effects of strength training on the physiological determinants of middle- and long-distance running performance: a systematic review. Sports Med 2018;48:1117–1149.',
+  MEEUSEN2013: 'Meeusen R, Duclos M, Foster C, et al. Prevention, diagnosis, and treatment of the overtraining syndrome: joint consensus statement of the ECSS and the ACSM. Med Sci Sports Exerc 2013;45:186–205. doi:10.1249/MSS.0b013e318279a10a (at least one passive rest day a week)',
+  GARBER2011: 'Garber CE, Blissmer B, Deschenes MR, et al. Quantity and quality of exercise for developing and maintaining cardiorespiratory, musculoskeletal, and neuromotor fitness in apparently healthy adults. Med Sci Sports Exerc 2011;43:1334–1359. doi:10.1249/MSS.0b013e318213fefb (aerobic exercise on 3–5 days a week)',
+  FRIEL: 'Friel J. Aerobic endurance and decoupling. TrainingPeaks. trainingpeaks.com/blog/aerobic-endurance-and-decoupling (decoupling below 5% as the mark of aerobic endurance; a coaching guideline)',
+  SMYTH2022: 'Smyth B, Maunder E, Meyler S, Hunter B, Muniz-Pumares D. Decoupling of internal and external workload during a marathon: an analysis of durability in 82,303 recreational runners. Sports Med 2022;52:2283–2295. doi:10.1007/s40279-022-01680-5',
+  ALLEN2019: 'Allen H, Coggan AR, McGregor S. Training and Racing with a Power Meter, 3rd ed. VeloPress, 2019. ISBN 978-1-937715-93-9 (performance manager: 42-day fitness, 7-day fatigue, form)',
+  COOK1985: 'Cook SD, Kester MA, Brunet ME. Shock absorption characteristics of running shoes. Am J Sports Med 1985;13:248–253. doi:10.1177/036354658501300406 (cushioning lost with distance)',
+  FRADKIN2010: 'Fradkin AJ, Zazryn TR, Smoliga JM. Effects of warming-up on physical performance: a systematic review with meta-analysis. J Strength Cond Res 2010;24:140–148. doi:10.1519/JSC.0b013e3181c643a0',
+  HOTTENROTT2016: 'Hottenrott K, Ludyga S, Schulze S, Gronwald T, Jäger FS. Does a run/walk strategy decrease cardiac stress during a marathon in non-elite runners? J Sci Med Sport 2016;19:64–68. doi:10.1016/j.jsams.2014.11.010',
+  RELPH2023: 'Relph N, Taylor PJ, Christian DL, Dey P, et al. "Couch-to-5k or Couch to Ouch to Couch!?" Who takes part in beginner runner programmes in the UK and is non-completion associated with musculoskeletal injury? Int J Environ Res Public Health 2023;20:6682. doi:10.3390/ijerph20176682',
 };
 const PLAN_SRC_KEYS = Object.keys(PLAN_SRC);
 const cite = keys => keys.map(k => `<sup><a href="#psrc-${k}">[${PLAN_SRC_KEYS.indexOf(k) + 1}]</a></sup>`).join('');
@@ -1816,11 +1840,11 @@ function buildPlan(now){
     // why: the weekly distance is too low to carry it (long run ≤ half the week), or there is too little time to grow it
     const byWeek = peakW * .5 < G.longNeed - .5;
     const why = byWeek
-      ? `The long run is kept to at most half of the weekly distance (a rule of thumb, so one run does not carry the week), and the weekly distance can only grow safely to ${fmtNum(peakW, 0)} km before the taper. A later race gives it more time.`
+      ? `The long run is kept to at most half of the weekly distance, so one run does not carry the week (Daniels advises 25–30%${cite(['DANIELS'])}; half is a rule of thumb that lets a low weekly volume still reach the long run), and the weekly distance can only grow safely to ${fmtNum(peakW, 0)} km before the taper. A later race gives it more time.`
       : `It grows at most 10% a week beyond your longest run of the last 30 days (${fmtNum(mWeek.longest30, 1)} km): runs much longer than that were linked to more injuries. There are not enough weeks before the taper to get further; a later race gives it more time.`;
     status.push(peakLong < G.longNeed * .75
-      ? {lvl: 'bad', t: 'Long run cannot grow enough', x: `The longest run in the plan is ${fmtNum(peakLong, 0)} km; about ${G.longNeed} km is recommended for this distance. ${why}`, src: byWeek ? ['PFITZINGER', 'NIELSEN2014'] : ['FRANDSEN2025', 'PFITZINGER']}
-      : {lvl: 'warn', t: 'Long run on the short side', x: `The longest run in the plan is ${fmtNum(peakLong, 0)} km; about ${G.longNeed} km is recommended. ${why}`, src: byWeek ? ['PFITZINGER', 'NIELSEN2014'] : ['FRANDSEN2025', 'PFITZINGER']});
+      ? {lvl: 'bad', t: 'Long run cannot grow enough', x: `The longest run in the plan is ${fmtNum(peakLong, 0)} km; about ${G.longNeed} km is recommended for this distance. ${why}`, src: byWeek ? ['PFITZINGER', 'DANIELS', 'NIELSEN2014'] : ['FRANDSEN2025', 'PFITZINGER']}
+      : {lvl: 'warn', t: 'Long run on the short side', x: `The longest run in the plan is ${fmtNum(peakLong, 0)} km; about ${G.longNeed} km is recommended. ${why}`, src: byWeek ? ['PFITZINGER', 'DANIELS', 'NIELSEN2014'] : ['FRANDSEN2025', 'PFITZINGER']});
   }
   if (target && mNow.V && !G.ultra){
     // ~1 VDOT per 4–6 weeks of consistent training at best; regaining a level reached in the last 2 years goes faster
@@ -1927,14 +1951,14 @@ function describe(x, G, pc, goalPace){
       'A second, medium-long run in the week adds aerobic volume and endurance for the marathon without the recovery cost of a second long run.',
       ['PFITZINGER', 'SEILER2006'], ''],
     threshold: ['Threshold intervals', `${x.wu / 2} km warm-up, ${x.reps} × 1.6 km at T pace ${p(pc?.T)} (comfortably hard, heart rate around ${P.ant} bpm) with 1 min jog, ${x.wu / 2} km cool-down.`,
-      'Threshold pace is about the effort you can keep up for an hour. Training there raises the speed you can hold before lactate accumulates. Splitting it into "cruise intervals" with short rests gives more time at this intensity with less strain. Daniels limits threshold running to about 10% of the weekly distance.',
-      ['DANIELS', 'CASADO2021'], 'q'],
+      'Threshold pace is about the effort you can keep up for an hour. Training there raises the speed you can hold before lactate accumulates. Splitting it into "cruise intervals" with short rests gives more time at this intensity with less strain. Daniels limits threshold running to about 10% of the weekly distance. A warm-up of easy running improves performance; below 35 km a week it is 1 km each way instead of 2 (a rule of thumb, so the session stays in proportion to the week).',
+      ['DANIELS', 'CASADO2021', 'FRADKIN2010'], 'q'],
     intervals: ['Intervals', `${x.wu / 2} km warm-up, ${x.reps} × 1 km at I pace ${p(pc?.I)} with 2–3 min easy jog, ${x.wu / 2} km cool-down.`,
-      'Repetitions of 3–5 minutes at about VO₂max pace raise your aerobic ceiling. In a polarised plan they are a small part of the week (Daniels: at most ~8% of the weekly distance, 10 km per session), next to a large volume of easy running.',
-      ['DANIELS', 'STOGGL2014', 'SEILER2006'], 'q'],
+      'Repetitions of 3–5 minutes at about VO₂max pace raise your aerobic ceiling. In a polarised plan they are a small part of the week (Daniels: at most ~8% of the weekly distance, 10 km per session), next to a large volume of easy running. A warm-up of easy running improves performance; below 35 km a week it is 1 km each way instead of 2 (a rule of thumb, so the session stays in proportion to the week).',
+      ['DANIELS', 'STOGGL2014', 'SEILER2006', 'FRADKIN2010'], 'q'],
     racepace: ['Race-pace repetitions', `${x.wu / 2} km warm-up, ${x.reps} × ${x.rep >= 1 ? x.rep + ' km' : x.rep * 1000 + ' m'} at goal pace ${goalPace ? fmtPace(goalPace) + '/km' : ''} with ${x.rep >= 3 ? '2 min' : '1 min'} jog, ${x.wu / 2} km cool-down.`,
-      'Close to the race, training becomes more specific: running at goal pace teaches rhythm, economy and pacing at exactly the speed you need on race day.',
-      ['DANIELS'], 'q'],
+      'Close to the race, training becomes more specific: running at goal pace teaches rhythm, economy and pacing at exactly the speed you need on race day. A warm-up of easy running improves performance; below 35 km a week it is 1 km each way instead of 2 (a rule of thumb, so the session stays in proportion to the week).',
+      ['DANIELS', 'FRADKIN2010'], 'q'],
     long: ['Long run', `${x.km} km easy at ${E}, ${easyHr}.`,
       'The long run is the key endurance session: it increases glycogen storage, fat use and the resilience of muscles, tendons and bones. It grows by at most 10% beyond your longest run of the last 30 days, because single runs longer than that were linked to a higher injury risk in a cohort of 5,200 runners.',
       ['PFITZINGER', 'FRANDSEN2025'], ''],
@@ -1955,8 +1979,11 @@ function describe(x, G, pc, goalPace){
       threshold: pc.T, intervals: pc.I, longM: pc.M, longFast: pc.T, racepace: goalPace}[x.type];
     if (key) x.detail += ` Pace zone ${paceZoneOf(key)}${['easy', 'strides', 'medium', 'long'].includes(x.type) ? `, heart-rate zone ${hrZoneOf(P.aet - 1) === 1 ? '1' : `1–${hrZoneOf(P.aet - 1)}`}` : ''}.`;
   }
-  if (PLAN_BEGINNER && ['easy', 'strides', 'long'].includes(x.type))
+  if (PLAN_BEGINNER && ['easy', 'strides', 'long'].includes(x.type)){
     x.detail += ' New to running? Alternate 1–2 min running with 1–2 min walking for this distance, and run a bit more of it every week; skip the strides until you can run 20 minutes without stopping.';
+    x.why += ' Walk breaks lower the strain of a run while the time on your feet stays the same; beginner programmes such as Couch-to-5K are built this way, although their exact build-up (and the 20 minutes) is a rule of thumb rather than tested.';
+    x.src = [...x.src, 'HOTTENROTT2016', 'RELPH2023'];
+  }
 }
 
 // this week: past days get done / missed, the remaining sessions share what is left of the weekly distance
@@ -2226,7 +2253,7 @@ function showView(v){
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showView(b.dataset.view));
 if (APP){
   document.body.classList.add('in-app');
-  $('#appEmptyText').innerHTML = 'Tap <b>Sync</b> to read your watch, or import a backup made on your Mac under <b>Settings › Import</b>.';
+  $('#appEmptyText').innerHTML = 'Tap <b>Sync</b> to read your watch, or import your Polar Flow export or a backup under <b>Settings › Your data</b>.';
   $('#fDir').parentElement.classList.add('hidden');
   if (!ALL.length) $('#appEmpty').classList.remove('hidden');
 }

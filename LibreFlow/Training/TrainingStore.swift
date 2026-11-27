@@ -78,8 +78,7 @@ final class TrainingStore {
         for id in watchTrainingIds() where hasSession(id) {
             if let t = decoded(id), writeSession(t) { redone.append(id) }
         }
-        let keep = importedIds().subtracting(redone)
-        try? JSONSerialization.data(withJSONObject: keep.sorted()).write(to: importedURL, options: .atomic)
+        forgetImported(redone)
         UserDefaults.standard.set(Self.sessionFormat, forKey: key)
     }
 
@@ -90,6 +89,12 @@ final class TrainingStore {
     func markImported(_ ids: [String]) {
         let all = importedIds().union(ids)
         try? JSONSerialization.data(withJSONObject: all.sorted()).write(to: importedURL, options: .atomic)
+    }
+    /// Hand these sessions to the analysis page again at the next import.
+    func forgetImported(_ ids: [String]) {
+        guard !ids.isEmpty else { return }
+        let keep = importedIds().subtracting(ids)
+        try? JSONSerialization.data(withJSONObject: keep.sorted()).write(to: importedURL, options: .atomic)
     }
     /// Session JSON texts the analysis page has not seen yet.
     func pendingSessions() -> [(id: String, json: String)] {

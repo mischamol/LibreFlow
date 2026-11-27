@@ -94,13 +94,42 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         wv.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
     }
 
+    /// iOS may end the page's process while the app is in the background (memory). The page would come back blank
+    /// or, after a reload, with the data handed over at app start. Build a fresh web view from the stored data instead;
+    /// its didFinish hands over any trainings synced meanwhile.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard webView === self.webView else { return }
+        rebuildWebView()
+    }
+
+    private func rebuildWebView() {
+        pageReady = false
+        webView = makeWebView()
+        objectWillChange.send()
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         pageReady = true
         showPageView(forTab: tab)
         pushStravaSetting()
         pushMapSetting()
-        importPending()
-        Task { await refreshSettings() }
+        Task {
+            await repairImported()
+            importPending()
+            await refreshSettings()
+        }
+    }
+
+    /// Once: watch trainings handed over earlier but missing from the page's data (lost by a reload with an old copy
+    /// of the data in app versions before 1.5.2) are handed over again. Trainings deleted on the page stay deleted;
+    /// ones the page skips on purpose (e.g. a 1-minute accidental start) are skipped again, which is why this runs once.
+    private func repairImported() async {
+        let key = "importRepair1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let ids = store.importedIds().sorted()
+        guard let missing = await call("return window.appMissing ? appMissing(ids) : null", ["ids": ids]) as? [String] else { return }
+        store.forgetImported(missing)
+        UserDefaults.standard.set(true, forKey: key)
     }
 
     /// Give the page every watch training it has not seen yet.
@@ -291,10 +320,7 @@ final class AppModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavi
         store.deleteAll()
         RouteLibrary.shared.reset()
         webView.evaluateJavaScript("localStorage.clear(); 0")
-        pageReady = false
-        let fresh = makeWebView()
-        webView = fresh
-        objectWillChange.send()
+        rebuildWebView()
     }
 }
 

@@ -2,9 +2,10 @@
 
 Every number LibreFlow shows in the **Analysis** advice and the **Running Plan** comes from fixed, transparent rules
 that run on your own device – no AI, no cloud. This page lists all of them: what is measured, which limit is used,
-why, and which research it is based on. Where no study backs the exact limit, it says **rule of thumb**.
+why, and which research it is based on. Every rule has a source; where the exact number is LibreFlow's own choice
+rather than a number from that source, it also says **rule of thumb**.
 
-The source numbers **[1]–[20]** are the same as in the app (the *Sources* lists under the advice and the plan).
+The source numbers **[1]–[29]** are the same as in the app (the *Sources* lists under the advice and the plan).
 The rules are a guide, not medical advice: listen to your body, and see a doctor with pain or illness.
 
 The rules live in one file, [`web/libreflow.html`](../web/libreflow.html) (the app uses a copy of it).
@@ -48,8 +49,8 @@ the activity. From the per-second heart rate when available, else from the avera
 ### Fitness, fatigue and form
 The Banister impulse–response model [17]: **fitness** = 42-day exponential average of daily TRIMP, **fatigue** =
 7-day average, **form** = fitness − fatigue. The model describes trends well, but its predictions for one athlete
-are uncertain [18]; the 42/7-day time constants are a software convention, and the limits used on form (below) are
-a rule of thumb.
+are uncertain [18]; the 42/7-day time constants are the usual ones from cycling software (Allen & Coggan's
+performance manager [25]), and the limits used on form (below) are a rule of thumb.
 
 ### Fitness estimate (VDOT) and predictions
 Daniels' VDOT [1] (Daniels & Gilbert's oxygen-cost and time-to-exhaustion formulas): from whole runs of at least
@@ -63,7 +64,8 @@ effort means a better aerobic fitness; a sudden drop points to fatigue, heat or 
 
 ### Aerobic decoupling
 For activities of 40 minutes or more: how much efficiency drops from the first to the second half, leaving out the
-first 10 minutes. Below 5% is the usual target for long easy runs (rule of thumb).
+first 10 minutes. Below 5% is the usual target for long easy runs, a coaching guideline from Joe Friel [23]; in
+82,303 marathon runners, less and later decoupling went with faster finishing times [24].
 
 ### Other figures
 - **Best efforts and records**: the fastest 1 km, 5 km, 10 km and half marathon anywhere within a run, from the
@@ -98,7 +100,7 @@ to injuries in a cohort of 5,200 runners [6], and the acute:chronic ratio is a r
 
 ## 3. Analysis advice
 
-Each advice item in the app shows *Based on: [n]* or *Rule of thumb*. The most urgent comes first.
+Each advice item in the app shows *Based on: [n]*, with a note when the exact limit is a rule of thumb. The most urgent comes first.
 
 | Advice | Rule | Sources |
 |---|---|---|
@@ -108,22 +110,23 @@ Each advice item in the app shows *Based on: [n]* or *Rule of thumb*. The most u
 | **Easy week** | Load ratio < 0.7 (with more than 5 km/week) | [9], [10] |
 | **Load in balance** | Load ratio 0.7–1.3 | [9], [10] |
 | **Big jump in weekly volume** | Last full week more than 25% above the 4 weeks before (or above the block for experienced runners) | [7], [8], [6] |
-| **Long run relatively heavy** | Longest run of 4 weeks > 12 km and more than 40% of the usual week (for experienced runners the usual week is at most the block, at most 2× the 4-week average) | rule of thumb |
+| **Long run relatively heavy** | Longest run of 4 weeks > 12 km and more than 40% of the usual week (for experienced runners the usual week is at most the block, at most 2× the 4-week average). Daniels advises 25–30%; 40% is a rule of thumb | [1], [6] |
 | **Few truly easy sessions** / **Good intensity distribution** / **Intensity** | Easy share of running time in 8 weeks below 65% / at least 75% / in between (with more than 3 hours of data) | [2], [3], [4] |
 | **Aerobic fitness rising / stable** / **Efficiency dropping** | Metres per heartbeat of the last 8 weeks vs. the 6 months before: > +3% / in between / < −4% | [12] |
 | **Fatigue signal** | Efficiency drop (section 2) | [12] |
 | **Break** | A gap of more than 10 days in the last 12 weeks: resume at ~70% of the previous volume | [15], [14] |
-| **A lot of fatigue built up** | Form below −40% of fitness | [17], [18] |
-| **Fatigue after your break** | Form below −40% of fitness after a gap of 10+ days in the last 7 weeks: in the model fitness drops during a break, so a normal week afterwards reads as high fatigue | [17], [18] |
-| **You are building up** | Form between −40% and −20% of fitness | [17], [18] |
-| **Rested** | Form above +25% of fitness | [17], [18] |
-| **Load and recovery in balance** | Form between −20% and +25% | [17], [18] |
-| **No rest day** | 10 or more days in a row with activity | rule of thumb |
-| **Frequency** | Fewer than 2.5 activities a week over 12 weeks | rule of thumb |
-| **Strong aerobic base** / **Heart rate drifts up** / **Aerobic decoupling** | Median decoupling of runs ≥ 60 min in 12 weeks: ≤ 5% / > 8% / in between | rule of thumb |
+| **A lot of fatigue built up** | Form below −40% of fitness | [17], [18], [25] |
+| **Fatigue after your break** | Form below −40% of fitness after a gap of 10+ days in the last 7 weeks: in the model fitness drops during a break, so a normal week afterwards reads as high fatigue | [17], [18], [25] |
+| **You are building up** | Form between −40% and −20% of fitness | [17], [18], [25] |
+| **Rested** | Form above +25% of fitness | [17], [18], [25] |
+| **Load and recovery in balance** | Form between −20% and +25% | [17], [18], [25] |
+| **No rest day** | 10 or more days in a row with activity. The consensus advises a passive rest day every week; warning only after 10 days is a rule of thumb | [21] |
+| **Frequency** | Fewer than 2.5 activities a week over 12 weeks. Guidelines advise aerobic exercise on 3–5 days a week; 2.5 is a rule of thumb | [22] |
+| **Strong aerobic base** / **Heart rate drifts up** / **Aerobic decoupling** | Median decoupling of runs ≥ 60 min in 12 weeks: ≤ 5% / > 8% / in between. 5% is a coaching guideline, 8% a rule of thumb | [23], [24] |
 | **Cadence** | Median below 160 steps/min: a 5% higher step rate reduced knee loading, 10% also hip loading | [19] |
 | **Polar running index** | Median of 8 weeks vs. a year ago | – (Polar's own figure) |
-| **Shoes** | A pair past its reminder distance (default 400 km) | rule of thumb |
+| **Your seasonal pattern** | Months with the most and least distance, from 3 or more years of your own activities | – (your own data) |
+| **Shoes** | A pair past its reminder distance (default 400 km). Cushioning drops with distance (below 60% of new after 250–500 miles in a machine test); a link with injuries is not proven, so 400 km is a rule of thumb | [26] |
 | **Running goal** | Shown when the running plan is not feasible or has caveats (section 4) | as in the plan |
 
 The form limits (−20% / −40% / +25% of fitness) are a rule of thumb: the model is useful as a trend, its exact
@@ -161,7 +164,7 @@ down 40–60%, the approach with the largest performance gain in a meta-analysis
   about 8 km/week.
 - **Growth**: at most 10% a week [7], [8]; experienced runners 15% a week while below 90% of their block, since
   regaining a level goes faster than building it the first time (the 15% is a rule of thumb; background [13], [14],
-  [15]).
+  [15]: experienced runners get injured less, and much of years of training remains after a break).
 - **Peak**: at least the minimum for the distance and enough for the recommended long run (which is at most half the
   week); a bit above what you run now; for experienced runners up to their block.
 - **Without a history** you can enter your current km/week, longest recent run and a recent race time. Each counts
@@ -173,7 +176,10 @@ down 40–60%, the approach with the largest performance gain in a meta-analysis
   linked to a higher injury risk in a cohort of 5,200 runners [6].
 - Never shrinks (except in lighter weeks and the taper); peaks in the peak phase (80% of the cap in the base phase,
   90% in the build phase).
-- At most half of the weekly distance (rule of thumb), and no other run longer than three quarters of the long run.
+- At most half of the weekly distance, and no other run longer than three quarters of the long run. Daniels advises
+  a long run of 25–30% of the week [1]; half is a rule of thumb that lets a low weekly volume still reach the long run
+  a race needs. The three quarters follow Pfitzinger's medium-long run, which is clearly shorter than the long run
+  [5].
 
 ### Signals that change this week (same as the Analysis advice, section 2)
 | Signal | Effect | Sources |
@@ -207,10 +213,13 @@ the first training day and one about midweek, never the day before the long run.
 - **Marathon-pace block** in the long run: at most 18 km, 20% of the week and 60% of the run [1], [5].
 - **Fast finish**: the last 25% of the long run (at most 5 km) at T pace [1], [5].
 - **Race**: even pacing, the first kilometres slightly slower [1].
-- Below 25 km/week no hard sessions (an easy base first) [1]; below 35 km/week 2 km warm-up and cool-down instead
-  of 4 (rule of thumb). With 3 days a week, one quality day.
+- Below 25 km/week no hard sessions (an easy base first) [1]. Hard sessions start with an easy warm-up, which
+  improves performance [27]; below 35 km/week it is 1 km each way instead of 2 (rule of thumb, to keep the session in
+  proportion to the week). With 3 days a week, one quality day.
 - **Beginners** (not experienced and below 10 km/week): run/walk (1–2 min running, 1–2 min walking) until 20 minutes
-  of continuous running (rule of thumb).
+  of continuous running. Walk breaks lowered cardiac strain and muscle pain at the same finishing time in non-elite
+  marathon runners [28]; beginner programmes such as Couch-to-5K are built this way, but their exact build-up has no
+  evidence base [29], so the 1–2 min and the 20 minutes are a rule of thumb.
 - Each session shows the pace and heart-rate zone its key pace falls in (section 1).
 
 ### Feasibility checks
@@ -230,18 +239,20 @@ updates.
 
 ## 5. Rules of thumb
 
-These limits are common coaching practice but not backed by a study for the exact number:
-- long run at most 40% of a usual week (advice) / at most half the week (plan);
-- no other run longer than three quarters of the long run;
-- 10 or more days in a row without a rest day;
-- fewer than 2.5 runs a week as a reason to add one;
-- aerobic decoupling below 5% as the target for long easy runs, above 8% as a drift;
-- the form limits −20% / −40% / +25% of fitness, and the 42/7-day time constants of the fitness/fatigue model;
-- 15% weekly growth for experienced runners rebuilding towards their block, and 0.93 × the best VDOT of 2 years
-  when there is no recent one;
-- 2 km instead of 4 km warm-up and cool-down below 35 km/week;
-- the run/walk advice for beginners;
-- a shoe reminder at 400 km by default.
+Every rule above has a source. For these the exact number is LibreFlow's own choice, set near what the source says:
+| Rule of thumb | Where it comes from |
+|---|---|
+| Long run at most 40% of a usual week (advice) / at most half the week (plan) | Daniels advises 25–30% [1]; LibreFlow is looser and relies on the 30-day growth limit for single runs [6] |
+| No other run longer than three quarters of the long run | Pfitzinger's medium-long run [5] |
+| A warning after 10 or more days in a row without a rest day | A passive rest day every week [21] |
+| Fewer than 2.5 runs a week as a reason to add one | Aerobic exercise on 3–5 days a week [22] |
+| Aerobic decoupling below 5% as the target, above 8% as a drift | Friel's 5% guideline [23]; decoupling and marathon performance [24] |
+| Form limits −20% / −40% / +25% of fitness; 42/7-day time constants | Banister model [17] and its limits [18]; the performance manager [25] |
+| 15% weekly growth for experienced runners rebuilding towards their block | Lower injury risk with experience [13]; detraining [14], [15] |
+| 0.93 × the best VDOT of 2 years when there is no recent one | VO2max about 7% lower after 2–3 weeks without training [15] |
+| 2 km instead of 4 km warm-up and cool-down below 35 km/week | Warm-up improves performance [27] |
+| Run/walk for beginners, until 20 minutes of continuous running | Run/walk strategy [28]; beginner programmes [29] |
+| A shoe reminder at 400 km by default | Cushioning lost with distance [26] |
 
 ---
 
@@ -302,3 +313,30 @@ These limits are common coaching practice but not backed by a study for the exac
 20. Blagrove RC, Howatson G, Hayes PR. Effects of strength training on the physiological determinants of middle- and
     long-distance running performance: a systematic review. *Sports Med* 2018;48:1117–1149.
     [doi:10.1007/s40279-017-0835-7](https://doi.org/10.1007/s40279-017-0835-7)
+21. Meeusen R, Duclos M, Foster C, et al. Prevention, diagnosis, and treatment of the overtraining syndrome: joint
+    consensus statement of the European College of Sport Science and the American College of Sports Medicine.
+    *Med Sci Sports Exerc* 2013;45:186–205. Recommends at least one passive rest day a week.
+    [doi:10.1249/MSS.0b013e318279a10a](https://doi.org/10.1249/MSS.0b013e318279a10a)
+22. Garber CE, Blissmer B, Deschenes MR, et al. Quantity and quality of exercise for developing and maintaining
+    cardiorespiratory, musculoskeletal, and neuromotor fitness in apparently healthy adults: guidance for prescribing
+    exercise (ACSM position stand). *Med Sci Sports Exerc* 2011;43:1334–1359.
+    [doi:10.1249/MSS.0b013e318213fefb](https://doi.org/10.1249/MSS.0b013e318213fefb)
+23. Friel J. Aerobic endurance and decoupling. TrainingPeaks (coaching article).
+    [trainingpeaks.com/blog/aerobic-endurance-and-decoupling](https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/)
+24. Smyth B, Maunder E, Meyler S, Hunter B, Muniz-Pumares D. Decoupling of internal and external workload during a
+    marathon: an analysis of durability in 82,303 recreational runners. *Sports Med* 2022;52:2283–2295.
+    [doi:10.1007/s40279-022-01680-5](https://doi.org/10.1007/s40279-022-01680-5)
+25. Allen H, Coggan AR, McGregor S. *Training and Racing with a Power Meter*, 3rd ed. VeloPress, 2019. Performance
+    manager: 42-day fitness, 7-day fatigue, form. ISBN 978-1-937715-93-9
+    ([Open Library](https://openlibrary.org/search?isbn=9781937715939))
+26. Cook SD, Kester MA, Brunet ME. Shock absorption characteristics of running shoes. *Am J Sports Med*
+    1985;13:248–253. [doi:10.1177/036354658501300406](https://doi.org/10.1177/036354658501300406)
+27. Fradkin AJ, Zazryn TR, Smoliga JM. Effects of warming-up on physical performance: a systematic review with
+    meta-analysis. *J Strength Cond Res* 2010;24:140–148.
+    [doi:10.1519/JSC.0b013e3181c643a0](https://doi.org/10.1519/JSC.0b013e3181c643a0)
+28. Hottenrott K, Ludyga S, Schulze S, Gronwald T, Jäger FS. Does a run/walk strategy decrease cardiac stress during
+    a marathon in non-elite runners? *J Sci Med Sport* 2016;19:64–68.
+    [doi:10.1016/j.jsams.2014.11.010](https://doi.org/10.1016/j.jsams.2014.11.010)
+29. Relph N, Taylor PJ, Christian DL, Dey P, et al. "Couch-to-5k or Couch to Ouch to Couch!?" Who takes part in
+    beginner runner programmes in the UK and is non-completion associated with musculoskeletal injury? *Int J Environ
+    Res Public Health* 2023;20:6682. [doi:10.3390/ijerph20176682](https://doi.org/10.3390/ijerph20176682)

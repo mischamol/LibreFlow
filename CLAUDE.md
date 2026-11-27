@@ -166,9 +166,10 @@ are in `CLAUDE.local.md`, which is not in git.
   experienced runners ("Back to your usual volume" when the plain ratio > 1.3 but vs. block ≤ 1.3), and the long-run
   share uses max(4-week avg, min(block, 2× 4-week avg)). Checked on the user's data: 47.3 km vs block 42.1 → 1.12. `analyse()` builds weeks
   with calendar days keyed by `ymdStr` (the old ms stepping lost weeks around DST: ~95 km/year in a test).
-  Every Analysis advice shows "Based on: [n]" (`SRC_OF` maps titles to `PLAN_SRC` keys; list in the Advice card's
-  Sources) or "Rule of thumb" where no study backs the exact limit. Fitness/fatigue = Banister impulse-response with
-  TRIMP (Morton 1990; limits per Hellard 2006), 42/7-day constants are a software convention, the −20/−40% form
+  Every Analysis advice shows "Based on: [n]" (`SRC_OF` maps titles to `PLAN_SRC` keys plus an optional note; list in
+  the Advice card's Sources). Every rule has a source, rules of thumb too (the note says when the exact limit is
+  LibreFlow's own; RULES.md §5 lists them with their origin). Fitness/fatigue = Banister impulse-response with
+  TRIMP (Morton 1990; limits per Hellard 2006), 42/7-day constants from Allen & Coggan's performance manager, the −20/−40% form
   limits a rule of thumb; after a 10+ day gap in the last 7 weeks it says "Fatigue after your break" (warn).
   Latest Activity / All Activities show every sport (speed km/h and no shoes for non-shoe sports; sport filter);
   Analysis has its own selector at the top (All activities, default, or one sport; `ANA_SPORT`, localStorage);
@@ -186,6 +187,11 @@ are in `CLAUDE.local.md`, which is not in git.
   the preview pane (data: URL) cannot store. In the app (`window.webkit.messageHandlers.libreflow`) storage, share,
   Strava and view switching go through the native side; the app's Settings tab uses
   `appSettings/appSetSettings/appCommand/appImportZip` and `appShoes/appSaveShoe/appDeleteShoe`.
+  The app hands the stored data to the page once (`window.__LIBREFLOW_STORE`, user script); `saveStore()` keeps that
+  copy current so an in-page reload (back from the demo) never shows older data. When iOS ends the page's process
+  (`webViewWebContentProcessDidTerminate`) the app builds a fresh web view from the stored data. Watch trainings go
+  to the page via `importPending()` (ids in `imported.json`); `appMissing(ids)` lets a one-time repair
+  (`importRepair1`) hand over trainings lost by the old reload bug again (deleted ones and ones the page skips stay out).
 - iPhone app "LibreFlow" at the root: `LibreFlow/` sources (SwiftUI, xcodegen `project.yml`; the `.xcodeproj` is generated and not in git).
   Native BLE PSFTP (`BLE/`), decoder/storage (`Training/`, identical to Python), Strava upload with the user's own
   Strava API app + TCX (`Strava/`). Tabs Latest Activity / Analysis / All Activities share one WKWebView (`WebSlot`), plus a
